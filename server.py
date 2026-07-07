@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import threading
 import time
 import urllib.parse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from email.utils import formatdate
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,10 +17,12 @@ from forecast_engine import CACHE_DIR, build_forecast, nearest_station, normaliz
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8765"))
 LEARNING_CITIES_PATH = CACHE_DIR / "learning_cities.json"
 DEFAULT_LEARNING_CITIES = ["Berlin", "Muenchen", "Nuernberg", "Hamburg", "Coburg"]
+_dashboard_cache: dict = {}
+DASHBOARD_CACHE_TTL = 300  # 5 minutes
 
 
 class WeatherHandler(BaseHTTPRequestHandler):
@@ -42,6 +46,8 @@ class WeatherHandler(BaseHTTPRequestHandler):
             return self.handle_learning_add(parsed.query)
         if parsed.path == "/api/learning/remove":
             return self.handle_learning_remove(parsed.query)
+        if parsed.path == "/api/learning/run":
+            return self.handle_learning_run()
         if parsed.path == "/feed.xml":
             return self.handle_feed(parsed.query)
         self.send_error(404, "Not found")
@@ -103,30 +109,38 @@ class WeatherHandler(BaseHTTPRequestHandler):
         self.send_json({"cities": load_learning_cities()})
 
     def handle_learning_dashboard(self) -> None:
+        cache_key = ",".join(sorted(load_learning_cities()))
+        now = time.time()
+        if cache_key in _dashboard_cache:
+            cached_time, cached_data = _dashboard_cache[cache_key]
+            if now - cached_time < DASHBOARD_CACHE_TTL:
+                return self.send_json(cached_data)
+
         cities = load_learning_cities()
         cards = []
         errors = []
-        for city in cities:
-            try:
-                payload = build_forecast(city=city, lat=None, lon=None, label=None)
-                compact = compact_forecast_payload(payload)
-                cards.append({
-                    "city": city,
-                    "location": compact["location"],
-                    "station": compact["station"],
-                    "generated_at": compact["generated_at"],
-                    "today": compact["days"][0] if compact["days"] else None,
-                    "summary": compact["summary"],
-                    "learning": payload["source"].get("learning"),
-                })
-            except Exception as exc:
-                errors.append({"city": city, "error": str(exc)})
-        self.send_json({
+
+        with ProcessPoolExecutor(max_workers=min(len(cities), 4)) as executor:
+            futures = {executor.submit(_build_learning_card, city): city for city in cities}
+            for future in as_completed(futures):
+                result = future.result()
+                if "error" in result:
+                    errors.append(result)
+                else:
+                    cards.append(result)
+
+        # preserve original city order
+        city_order = {city: i for i, city in enumerate(cities)}
+        cards.sort(key=lambda c: city_order.get(c["city"], 99))
+
+        payload = {
             "cities": cities,
             "cards": cards,
             "errors": errors,
             "generated_at": formatdate(usegmt=True),
-        })
+        }
+        _dashboard_cache[cache_key] = (now, payload)
+        self.send_json(payload)
 
     def handle_learning_add(self, query: str) -> None:
         params = urllib.parse.parse_qs(query)
@@ -150,6 +164,17 @@ class WeatherHandler(BaseHTTPRequestHandler):
         ]
         save_learning_cities(cities)
         self.send_json({"cities": cities})
+
+    def handle_learning_run(self) -> None:
+        cities = load_learning_cities()
+        results = []
+        for city in cities:
+            try:
+                build_forecast(city=city, lat=None, lon=None, label=None)
+                results.append({"city": city, "status": "ok"})
+            except Exception as exc:
+                results.append({"city": city, "status": "error", "error": str(exc)})
+        self.send_json({"cities": cities, "results": results})
 
     def serve_file(self, path: Path) -> None:
         if not path.exists() or not path.is_file():
@@ -237,6 +262,24 @@ def parse_optional_float(value: str | None) -> float | None:
     return float(value)
 
 
+def _build_learning_card(city: str) -> dict:
+    """Build a learning dashboard card for a city. Top-level for ProcessPoolExecutor."""
+    try:
+        payload = build_forecast(city=city, lat=None, lon=None, label=None)
+        compact = compact_forecast_payload(payload)
+        return {
+            "city": city,
+            "location": compact["location"],
+            "station": compact["station"],
+            "generated_at": compact["generated_at"],
+            "today": compact["days"][0] if compact["days"] else None,
+            "summary": compact["summary"],
+            "learning": payload["source"].get("learning"),
+        }
+    except Exception as exc:
+        return {"city": city, "error": str(exc)}
+
+
 def compact_forecast_payload(payload: dict) -> dict:
     return {
         "location": payload["location"],
@@ -310,13 +353,14 @@ def run_learning_cycle_once() -> None:
 
 
 def run_learning_scheduler() -> None:
+    time.sleep(120)  # initial delay so the server can serve first requests
     while True:
         run_learning_cycle_once()
         time.sleep(24 * 60 * 60)
 
 
 if __name__ == "__main__":
-    threading.Thread(target=run_learning_scheduler, daemon=True).start()
+    # Learning scheduler disabled — use external cron job instead
     server = ThreadingHTTPServer((HOST, PORT), WeatherHandler)
     print(f"a better weather läuft auf http://{HOST}:{PORT}")
     server.serve_forever()

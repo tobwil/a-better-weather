@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import functools
 import io
 import json
 import math
@@ -26,6 +27,7 @@ OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 CACHE_DIR = Path(".weather_cache")
 CACHE_DIR.mkdir(exist_ok=True)
 ARCHIVE_PATH = CACHE_DIR / "forecast_archive.jsonl"
+_pattern_cache: dict[tuple, dict[str, Any]] = {}
 LOCAL_TZ = ZoneInfo("Europe/Berlin")
 WEIGHTING_STATUS = "learning_enabled"
 WEIGHTING_NOTE = (
@@ -87,6 +89,7 @@ class Station:
 
 
 def build_forecast(city: str | None, lat: float | None, lon: float | None, label: str | None = None) -> dict[str, Any]:
+    _pattern_cache.clear()
     resolved_lat, resolved_lon, resolved_label = resolve_location(city, lat, lon, label)
     station = nearest_station(resolved_lat, resolved_lon)
     observations = load_station_observations(station.station_id)
@@ -725,6 +728,9 @@ def challenge_day(
 
 
 def historical_pattern(observations: list[dict[str, Any]], target_date: date, window: int = 12) -> dict[str, Any]:
+    cache_key = (target_date, window, id(observations))
+    if cache_key in _pattern_cache:
+        return _pattern_cache[cache_key]
     values = []
     for row in observations:
         measured = date.fromisoformat(row["date"])
@@ -741,7 +747,7 @@ def historical_pattern(observations: list[dict[str, Any]], target_date: date, wi
     rains = [row.get("rain_mm", 0.0) or 0.0 for row in values]
     rain_days = [rain for rain in rains if rain >= 0.2]
     heavy_rain_days = [rain for rain in rains if rain >= 5.0]
-    return {
+    result = {
         "t_mean": statistics.fmean(temps) if temps else 15.0,
         "t_low": percentile(temps, 10) if temps else 8.0,
         "t_high": percentile(temps, 90) if temps else 22.0,
@@ -752,6 +758,8 @@ def historical_pattern(observations: list[dict[str, Any]], target_date: date, wi
         "heavy_rain_probability": len(heavy_rain_days) / len(rains) if rains else 0.0,
         "sample_size": len(values),
     }
+    _pattern_cache[cache_key] = result
+    return result
 
 
 def recent_signal(observations: list[dict[str, Any]], target_date: date) -> dict[str, float]:

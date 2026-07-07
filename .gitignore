@@ -3,4 +3,5 @@ __pycache__/
 .weather_cache/
 .DS_Store
 *.pyc
+.env
 
