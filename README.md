@@ -23,7 +23,41 @@ Quellen:
 - OpenWeather 5 day / 3 hour forecast: `https://api.openweathermap.org/data/2.5/forecast`
 - Open-Meteo Forecast API: `https://api.open-meteo.com/v1/forecast`
 
-## Start
+## Docker (empfohlen)
+
+```bash
+# Image bauen
+docker build -t a-better-weather .
+
+# Container starten
+docker run -d \
+  --name a-better-weather \
+  --restart unless-stopped \
+  -p 8765:8765 \
+  -e OPENWEATHER_API_KEY="dein-key" \
+  -v $(pwd)/weather-cache:/app/.weather_cache \
+  a-better-weather
+```
+
+Dann öffnen: `http://localhost:8765`
+
+### Täglicher Learning-Lauf
+
+Der In-Process-Scheduler ist deaktiviert. Für den täglichen Archiv-Lauf einen Cron-Job einrichten:
+
+```bash
+# Täglich um 4:00 Uhr
+0 4 * * * curl -s http://localhost:8765/api/learning/run
+```
+
+Oder als Hermes-Cronjob:
+```
+hermes cron create --schedule "0 4 * * *" \
+  --prompt "curl -s http://localhost:8765/api/learning/run" \
+  --name "Weather Daily Learning"
+```
+
+## Start (ohne Docker)
 
 ```bash
 export OPENWEATHER_API_KEY="dein-key"
@@ -39,6 +73,23 @@ http://127.0.0.1:8765
 Ohne `OPENWEATHER_API_KEY` liefert die API bewusst einen Fehler. Die App verwendet im Produktivpfad keine Demo-Forecasts.
 Die Startseite lädt standardmäßig Trainingskacheln für Berlin, Muenchen, Nuernberg, Hamburg und Coburg. Eine freie Detailabfrage startet erst nach Ortseingabe und Klick auf `Forecast bauen`.
 
+## Raspberry Pi Optimierungen (`rpi`-Branch)
+
+Der `rpi`-Branch enthält spezifische Optimierungen für den Raspberry Pi (und andere ARM/Single-Board-Computer):
+
+- **`historical_pattern()`-Cache** – ~4× schneller durch Memoization (29.000 DWD-Zeilen werden pro Request nur einmal statt ~80× gescannt)
+- **Paralleles Dashboard** – `ProcessPoolExecutor` baut Learning-Dashboard-Karten parallel auf mehreren Cores
+- **Dashboard-Ergebnis-Cache** – 5-Minuten-TTL: erster Aufruf ~16s (Pi 4B), danach <0,1s
+- **In-Process-Scheduler deaktiviert** – verhindert CPU-Contention mit Web-Requests; Learning-Lauf über externen Cron-Job
+- **HOST/PORT per Env-Variable** – `HOST=0.0.0.0` und `PORT=8765` für Docker
+
+Performance auf Raspberry Pi 4B (2 Trainingsstädte, gecachte DWD-Daten):
+
+| Metrik | Vorher | Nachher |
+|--------|--------|---------|
+| Einzelstadt-Forecast | ~34s | ~8s |
+| Dashboard (2 Städte) | timeout | ~16s (kalt) / <0,1s (warm) |
+
 ## API
 
 ```text
@@ -50,13 +101,14 @@ GET /api/learning
 GET /api/learning/dashboard
 GET /api/learning/add?city=Kassel
 GET /api/learning/remove?city=Kassel
+GET /api/learning/run
 GET /feed.xml?city=Berlin
 ```
 
 Der Cache liegt in `.weather_cache/`.
 Forecast-Snapshots werden produktiv in `.weather_cache/forecast_archive.jsonl` gesammelt. Sobald abgelaufene Forecast-Tage als DWD-Istwerte vorliegen, berechnet die App daraus Temperatur-MAE und Regen-Brier-Score gegen OpenWeather.
 
-`/api/forecast` liefert den vollständigen Payload inklusive `math`-Deep-Dive je Tag. `/api/forecast/compact` ist für Widgets oder externe Tools gedacht. `/feed.xml` erzeugt einen RSS-Feed für einen Ort.
+`/api/forecast` liefert den vollständigen Payload inklusive `math`-Deep-Dive je Tag. `/api/forecast/compact` ist für Widgets oder externe Tools gedacht. `/feed.xml` erzeugt einen RSS-Feed für einen Ort. `/api/learning/run` triggert einen manuellen Lernlauf für alle Städte.
 
 ## Modellstatus
 
@@ -68,7 +120,7 @@ Die Kalibrierung folgt einer MOS/EMOS-artigen Idee: Temperatur wird über Fehler
 
 Die Startseite zeigt standardmäßig Berlin, Muenchen, Nuernberg, Hamburg und Coburg als Trainingsstädte. Die Liste liegt in `.weather_cache/learning_cities.json` und kann über die UI oder die `/api/learning/add`-/`remove`-Endpunkte geändert werden.
 
-Solange der Server läuft, zieht ein Hintergrundlauf die Lernstädte einmal beim Start und danach alle 24 Stunden. Jeder Tageslauf legt pro Stadt höchstens einen Forecast-Snapshot im Archiv ab. Sobald der Zieltag in den DWD-Istwerten vorhanden ist, wird dieser Snapshot fürs Training der Blend-Gewichte verwendet.
+Der Lernlauf wird über einen externen Cron-Job (empfohlen: täglich) via `/api/learning/run` angestoßen. Jeder Tageslauf legt pro Stadt höchstens einen Forecast-Snapshot im Archiv ab. Sobald der Zieltag in den DWD-Istwerten vorhanden ist, wird dieser Snapshot fürs Training der Blend-Gewichte verwendet.
 
 ## Begriffe
 
