@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 DWD_DAILY_BASE = "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate/daily/kl"
 OPENWEATHER_FORECAST_URL = "https://api.openweathermap.org/data/2.5/forecast"
+OPENWEATHER_CURRENT_URL = "https://api.openweathermap.org/data/2.5/weather"
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 CACHE_DIR = Path(".weather_cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -95,7 +96,9 @@ def build_forecast(city: str | None, lat: float | None, lon: float | None, label
     observations = load_station_observations(station.station_id)
     learning = learned_blend_weights(station, observations)
     openweather = fetch_openweather_forecast(resolved_lat, resolved_lon, resolved_label)
+    openweather_current = fetch_openweather_current(resolved_lat, resolved_lon)
     open_meteo = fetch_open_meteo_forecast(resolved_lat, resolved_lon)
+    current = build_current_conditions(openweather_current, aggregate_open_meteo_current(open_meteo))
     daily = aggregate_openweather_daily(openweather, resolved_lat, resolved_lon)
     open_meteo_daily = aggregate_open_meteo_daily(open_meteo)
     openweather_hourly = aggregate_openweather_hourly(openweather)
@@ -136,7 +139,8 @@ def build_forecast(city: str | None, lat: float | None, lon: float | None, label
             "weighting_note": WEIGHTING_NOTE,
             "learning": learning,
         },
-        "overview": build_overview(resolved_label, station, analyzed_days),
+        "current": current,
+        "overview": build_overview(resolved_label, station, analyzed_days, current),
         "calibration": archive_calibration(station, observations),
         "hourly": hourly,
         "days": analyzed_days,
@@ -322,10 +326,35 @@ def fetch_openweather_forecast(lat: float, lon: float, label: str) -> dict[str, 
     return fetch_json(f"{OPENWEATHER_FORECAST_URL}?{query}", cache_key=f"owm_{lat:.3f}_{lon:.3f}.json", ttl_seconds=900)
 
 
+def fetch_openweather_current(lat: float, lon: float) -> dict[str, Any]:
+    api_key = os.environ.get("OPENWEATHER_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENWEATHER_API_KEY fehlt. Für Produktivdaten bitte den OpenWeather API Key als Umgebungsvariable setzen.")
+
+    query = urllib.parse.urlencode({
+        "lat": f"{lat:.5f}",
+        "lon": f"{lon:.5f}",
+        "appid": api_key,
+        "units": "metric",
+        "lang": "de",
+    })
+    payload = fetch_json(f"{OPENWEATHER_CURRENT_URL}?{query}", cache_key=f"owm_current_{lat:.3f}_{lon:.3f}.json", ttl_seconds=300)
+    payload["_source"] = "openweather-current"
+    return payload
+
+
 def fetch_open_meteo_forecast(lat: float, lon: float) -> dict[str, Any]:
     query = urllib.parse.urlencode({
         "latitude": f"{lat:.5f}",
         "longitude": f"{lon:.5f}",
+        "current": ",".join([
+            "temperature_2m",
+            "relative_humidity_2m",
+            "precipitation",
+            "rain",
+            "weather_code",
+            "wind_speed_10m",
+        ]),
         "daily": ",".join([
             "weather_code",
             "temperature_2m_mean",
@@ -347,9 +376,74 @@ def fetch_open_meteo_forecast(lat: float, lon: float) -> dict[str, Any]:
         "wind_speed_unit": "ms",
         "precipitation_unit": "mm",
     })
-    payload = fetch_json(f"{OPEN_METEO_FORECAST_URL}?{query}", cache_key=f"om_{lat:.3f}_{lon:.3f}.json", ttl_seconds=900)
+    payload = fetch_json(f"{OPEN_METEO_FORECAST_URL}?{query}", cache_key=f"om_v2_{lat:.3f}_{lon:.3f}.json", ttl_seconds=900)
     payload["_source"] = "open-meteo"
     return payload
+
+
+def build_current_conditions(openweather_payload: dict[str, Any], open_meteo_current: dict[str, Any] | None) -> dict[str, Any]:
+    main = openweather_payload.get("main") or {}
+    wind = openweather_payload.get("wind") or {}
+    descriptions = openweather_payload.get("weather") or []
+    owm_time = timestamp_to_local(openweather_payload.get("dt"))
+    openweather = {
+        "source": "OpenWeather Current Weather",
+        "temperature_c": round_optional(main.get("temp"), 1),
+        "feels_like_c": round_optional(main.get("feels_like"), 1),
+        "humidity": round_optional(main.get("humidity"), 0),
+        "wind_mps": round_optional(wind.get("speed"), 1),
+        "description": descriptions[0].get("description", "wechselhaft") if descriptions else "wechselhaft",
+        "observed_at": owm_time,
+        "kind": "nowcast",
+    }
+    open_meteo = open_meteo_current or None
+    gap = None
+    if openweather["temperature_c"] is not None and open_meteo and open_meteo.get("temperature_c") is not None:
+        gap = round(abs(openweather["temperature_c"] - open_meteo["temperature_c"]), 1)
+
+    best_source = "OpenWeather Current Weather" if openweather["temperature_c"] is not None else "Open-Meteo Current"
+    best_temp = openweather["temperature_c"] if openweather["temperature_c"] is not None else (open_meteo or {}).get("temperature_c")
+    best_description = openweather["description"] if openweather["temperature_c"] is not None else (open_meteo or {}).get("description")
+    confidence = "hoch" if gap is not None and gap <= 1.5 else "mittel" if gap is not None and gap <= 3.0 else "niedrig" if gap is not None else "unbekannt"
+    if gap is None:
+        explanation = "Jetzt-Wert aus einer Quelle. Tageskarten bleiben Tagesmittel-Forecasts."
+    elif gap <= 1.5:
+        explanation = "OpenWeather Current und Open-Meteo Current liegen nah beieinander. Der Jetzt-Wert ist plausibel."
+    elif gap <= 3.0:
+        explanation = "OpenWeather Current und Open-Meteo Current unterscheiden sich merklich. Jetzt-Wert und Stundenforecast getrennt lesen."
+    else:
+        explanation = "Starker Nowcast-Dissens: OpenWeather Current und Open-Meteo Current sehen die aktuelle Temperatur deutlich anders. Die Tageskarten zeigen trotzdem nur Tagesmittel-Forecasts."
+
+    return {
+        "best": {
+            "temperature_c": best_temp,
+            "description": best_description,
+            "source": best_source,
+            "confidence": confidence,
+        },
+        "openweather": openweather,
+        "open_meteo": open_meteo,
+        "temperature_gap_c": gap,
+        "explanation": explanation,
+        "note": "Jetzt = aktueller Nowcast/Beobachtungswert. Tageskarten = Tagesmittel und Tages-Spanne. Stundenliste = Forecast-Slots ab jetzt.",
+    }
+
+
+def aggregate_open_meteo_current(payload: dict[str, Any]) -> dict[str, Any] | None:
+    current = payload.get("current") or {}
+    if not current:
+        return None
+    return {
+        "source": "Open-Meteo Current",
+        "temperature_c": round_optional(current.get("temperature_2m"), 1),
+        "humidity": round_optional(current.get("relative_humidity_2m"), 0),
+        "precipitation_mm": round_optional(current.get("precipitation"), 1) or 0.0,
+        "rain_mm": round_optional(current.get("rain"), 1) or 0.0,
+        "wind_mps": round_optional(current.get("wind_speed_10m"), 1),
+        "description": weather_code_label(current.get("weather_code")),
+        "observed_at": normalize_open_meteo_time(current.get("time")),
+        "kind": "model_current",
+    }
 
 
 def aggregate_openweather_daily(payload: dict[str, Any], lat: float, lon: float) -> list[dict[str, Any]]:
@@ -1030,7 +1124,7 @@ def rain_window_label(slots: list[dict[str, Any]]) -> str:
     return "mittags bis abends"
 
 
-def build_overview(label: str, station: Station, days: list[dict[str, Any]]) -> dict[str, Any]:
+def build_overview(label: str, station: Station, days: list[dict[str, Any]], current: dict[str, Any] | None = None) -> dict[str, Any]:
     if not days:
         return {
             "headline": "Noch keine Vorhersagetage verfügbar.",
@@ -1047,11 +1141,19 @@ def build_overview(label: str, station: Station, days: list[dict[str, Any]]) -> 
     weakest = min(days, key=lambda day: day["likely"]["confidence"])
     avg_confidence = round(statistics.fmean(day["likely"]["confidence"] for day in days))
 
-    headline = (
-        f"{label}: {likely_first['condition']} heute, "
-        f"{likely_first['t_mean']:.1f}° im Mittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
-    )
+    current_temp = (current or {}).get("best", {}).get("temperature_c")
+    if current_temp is not None:
+        headline = (
+            f"{label}: aktuell {current_temp:.1f}°. Rest des Tages: {likely_first['condition'].lower()}, "
+            f"{likely_first['t_mean']:.1f}° im Forecast-Mittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
+        )
+    else:
+        headline = (
+            f"{label}: {likely_first['condition']} heute, "
+            f"{likely_first['t_mean']:.1f}° im Tagesmittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
+        )
     detail = (
+        f"Jetzt-Wert und Forecast sind unterschiedliche Größen; der heutige Forecast beschreibt den restlichen Tagesverlauf. "
         f"Wärmster Tag: {format_day_label(warmest['date'])} mit bis zu {warmest['likely'].get('t_max', warmest['likely']['t_mean']):.1f}°. "
         f"Höchstes Regenrisiko: {format_day_label(wettest['date'])} mit {round(wettest['likely']['rain_probability'] * 100)}%. "
         f"Confidence im Mittel: {avg_confidence}%; unsicherster Tag: {format_day_label(weakest['date'])} ({weakest['likely']['confidence']}%)."
@@ -1455,6 +1557,24 @@ def safe_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=LOCAL_TZ)
     return parsed.astimezone(LOCAL_TZ)
+
+
+def timestamp_to_local(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(value), timezone.utc).astimezone(LOCAL_TZ).isoformat()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def normalize_open_meteo_time(value: Any) -> str | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).replace(tzinfo=LOCAL_TZ).isoformat()
+    except ValueError:
+        return None
 
 
 def parse_float(value: str | None) -> float | None:

@@ -150,6 +150,41 @@ button:disabled {
   font-size: 1.25rem;
 }
 
+.learning-current {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: #eef8f5;
+}
+
+.learning-current span {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.learning-current strong {
+  color: var(--ink);
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 0.95;
+  font-weight: 950;
+}
+
+.learning-current em {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.learning-current.missing {
+  border-color: var(--line);
+  background: #f8faf8;
+}
+
 .learning-mini {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -253,6 +288,44 @@ button:disabled {
 
 .summary-band strong {
   font-size: 1rem;
+}
+
+.current-band {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.15fr) repeat(3, minmax(180px, 1fr));
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+  background: #f8faf8;
+}
+
+.current-band > div {
+  min-height: 112px;
+  padding: 18px 20px;
+  border-right: 1px solid var(--line);
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.current-band > div:last-child {
+  border-right: 0;
+}
+
+.current-band strong {
+  font-size: 1.25rem;
+}
+
+.current-main strong {
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1;
+}
+
+.current-band p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .calibration-band {
@@ -572,6 +645,12 @@ tr:last-child td {
   align-content: start;
 }
 
+.day-card.is-today-current {
+  border-width: 2px;
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #eef8f5 0, #ffffff 190px);
+}
+
 .day-top {
   display: flex;
   justify-content: space-between;
@@ -586,9 +665,17 @@ tr:last-child td {
   font-weight: 800;
 }
 
+.value-kind {
+  margin: 6px 0 0;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .temp {
-  margin: 4px 0 0;
-  font-size: 2.1rem;
+  margin: 3px 0 0;
+  font-size: clamp(2.3rem, 4vw, 3.8rem);
   line-height: 1;
   font-weight: 900;
 }
@@ -619,6 +706,27 @@ tr:last-child td {
 
 .badge.low {
   background: var(--red);
+}
+
+.today-forecast-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.today-forecast-note span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.today-forecast-note strong {
+  font-size: 0.94rem;
+  line-height: 1.3;
 }
 
 .mini-grid {
@@ -744,6 +852,7 @@ tr:last-child td {
   }
 
   .forecast-brief,
+  .current-band,
   .summary-band,
   .calibration-band {
     grid-template-columns: 1fr;
@@ -792,6 +901,7 @@ tr:last-child td {
   }
 
   .summary-band,
+  .current-band,
   .day-grid {
     grid-template-columns: 1fr;
   }
@@ -813,6 +923,15 @@ tr:last-child td {
   .summary-band > div {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  .current-band > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .current-band > div:last-child {
+    border-bottom: 0;
   }
 
   .summary-band > div:last-child {

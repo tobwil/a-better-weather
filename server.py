@@ -185,6 +185,7 @@ class WeatherHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
         self.end_headers()
         self.wfile.write(data)
 
@@ -272,6 +273,7 @@ def _build_learning_card(city: str) -> dict:
             "location": compact["location"],
             "station": compact["station"],
             "generated_at": compact["generated_at"],
+            "current": compact.get("current"),
             "today": compact["days"][0] if compact["days"] else None,
             "summary": compact["summary"],
             "learning": payload["source"].get("learning"),
@@ -285,6 +287,7 @@ def compact_forecast_payload(payload: dict) -> dict:
         "location": payload["location"],
         "station": payload["station"],
         "generated_at": payload["source"]["generated_at"],
+        "current": payload.get("current"),
         "summary": payload["overview"],
         "feed": f"/feed.xml?city={urllib.parse.quote(payload['location']['label'])}",
         "days": [
