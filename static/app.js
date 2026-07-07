@@ -117,10 +117,10 @@ async function loadForecast(city) {
     renderCurrent(payload.current);
     renderSummary(payload);
     renderCalibration(payload.calibration);
-    renderComparison(payload.days);
+    renderComparison(payload.days, payload.current);
     renderHourly(payload.hourly || []);
     renderNerd(payload);
-    renderDays(payload.days);
+    renderDays(payload.days, payload.current);
     lastDays = payload.days;
     currentPayload = payload;
     briefEl.classList.remove("is-hidden");
@@ -283,8 +283,8 @@ function renderCalibration(calibration) {
   calibrationDetail.textContent = calibration.summary || "Kalibrierung baut sich auf.";
 }
 
-function renderComparison(days) {
-  comparisonBody.innerHTML = days.map((day) => {
+function renderComparison(days, current) {
+  comparisonBody.innerHTML = days.map((day, index) => {
     const likely = day.likely || day.challenged;
     return `
       <tr>
@@ -293,7 +293,7 @@ function renderComparison(days) {
         <td>${formatForecastCell(day.open_meteo)}</td>
         <td>${formatForecastCell(day.model_consensus)}</td>
         <td>${formatDwdCell(day.pattern)}</td>
-        <td><strong>${formatTemp(likely.t_mean)}</strong><span>${Math.round(likely.rain_probability * 100)}% Regen, ${formatWind(likely.wind_mean)}</span></td>
+        <td>${formatLikelyCell(day, current, index)}</td>
         <td><strong>${escapeHtml(day.rain_signal?.level || "-")}</strong><span>${day.rain_signal?.score ?? "-"} / 100 · ${escapeHtml(day.rain_signal?.timing?.wet_window || "")}</span></td>
       </tr>
     `;
@@ -413,9 +413,10 @@ function renderEquationRows(rows) {
   `).join("")}</dl>`;
 }
 
-function renderDays(days) {
-  daysEl.innerHTML = days.map((day) => {
+function renderDays(days, current) {
+  daysEl.innerHTML = days.map((day, index) => {
     const likely = day.likely || day.challenged;
+    const display = primaryDayDisplay(day, current, index);
     const confidenceClass = likely.confidence >= 78 ? "high" : likely.confidence >= 58 ? "medium" : "low";
     const date = new Date(`${day.date}T12:00:00Z`);
     const dateLabel = date.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -424,8 +425,9 @@ function renderDays(days) {
         <div class="day-top">
           <div>
             <p class="date">${dateLabel}</p>
-            <p class="temp">${formatTemp(likely.t_mean)}</p>
-            <p class="condition">${escapeHtml(likely.condition || day.openweather.description)}</p>
+            <p class="value-kind">${escapeHtml(display.label)}</p>
+            <p class="temp">${formatTemp(display.temperature)}</p>
+            <p class="condition">${escapeHtml(display.condition)}</p>
           </div>
           <span class="badge ${confidenceClass}" title="${escapeHtml(confidenceTitle(day))}">${likely.confidence}%</span>
         </div>
@@ -451,6 +453,34 @@ function renderDays(days) {
       </article>
     `;
   }).join("");
+}
+
+function primaryDayDisplay(day, current, index) {
+  const likely = day.likely || day.challenged || {};
+  const best = current?.best || {};
+  if (index === 0 && Number.isFinite(best.temperature_c)) {
+    const observedAt = current?.openweather?.observed_at || current?.open_meteo?.observed_at;
+    const time = formatTime(observedAt);
+    return {
+      label: time ? `Jetzt · ${time}` : "Jetzt",
+      temperature: best.temperature_c,
+      condition: `Realwert · ${best.description || likely.condition || "-"}`,
+    };
+  }
+  return {
+    label: "Forecast-Tagesmittel",
+    temperature: likely.t_mean,
+    condition: likely.condition || day.openweather?.description || "-",
+  };
+}
+
+function formatLikelyCell(day, current, index) {
+  const likely = day.likely || day.challenged || {};
+  const display = primaryDayDisplay(day, current, index);
+  if (index === 0 && Number.isFinite(current?.best?.temperature_c)) {
+    return `<strong>${formatTemp(display.temperature)}</strong><span>${escapeHtml(display.label)} · Forecast-Mittel ${formatTemp(likely.t_mean)} · ${Math.round((likely.rain_probability || 0) * 100)}% Regen</span>`;
+  }
+  return `<strong>${formatTemp(likely.t_mean)}</strong><span>${Math.round((likely.rain_probability || 0) * 100)}% Regen, ${formatWind(likely.wind_mean)}</span>`;
 }
 
 function renderChart(days) {
