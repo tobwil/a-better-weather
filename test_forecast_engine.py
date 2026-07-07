@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 from forecast_engine import (
     Station,
+    build_current_conditions,
     build_hourly_forecast,
     build_overview,
     challenge_day,
@@ -192,11 +193,35 @@ class ForecastEngineTests(unittest.TestCase):
         self.assertEqual(rain_score(0.11, 0.2), 8)
         self.assertEqual(rain_level(0.11, 0.2), "geringes Regenrisiko")
 
+    def test_current_conditions_keep_nowcast_separate_from_forecast(self):
+        current = build_current_conditions(
+            {
+                "dt": 1783442400,
+                "main": {"temp": 27.1, "feels_like": 27.0, "humidity": 45},
+                "wind": {"speed": 3.2},
+                "weather": [{"description": "bewölkt"}],
+            },
+            {
+                "source": "Open-Meteo Current",
+                "temperature_c": 22.3,
+                "wind_mps": 2.4,
+                "description": "Bedeckt",
+                "observed_at": "2026-07-07T18:00:00+02:00",
+                "kind": "model_current",
+            },
+        )
+
+        self.assertEqual(current["best"]["temperature_c"], 27.1)
+        self.assertEqual(current["temperature_gap_c"], 4.8)
+        self.assertEqual(current["best"]["confidence"], "niedrig")
+        self.assertIn("Tageskarten", current["explanation"])
+
     def test_compact_payload_and_rss_use_forecast_days(self):
         payload = {
             "location": {"label": "Teststadt", "lat": 50.0, "lon": 8.0},
             "station": {"id": "00000", "name": "Demo"},
             "source": {"generated_at": "2026-07-07T12:00:00+00:00"},
+            "current": {"best": {"temperature_c": 27.1, "source": "OpenWeather Current Weather"}},
             "overview": {"headline": "Teststadt: trocken.", "detail": "", "actions": [], "watch": []},
             "days": [
                 {
@@ -224,6 +249,7 @@ class ForecastEngineTests(unittest.TestCase):
         feed = rss_feed(payload)
 
         self.assertEqual(compact["days"][0]["rain_index"], 9)
+        self.assertEqual(compact["current"]["best"]["temperature_c"], 27.1)
         self.assertIn("/feed.xml?city=Teststadt", compact["feed"])
         self.assertIn("<rss", feed)
         self.assertIn("geringes Regenrisiko", feed)

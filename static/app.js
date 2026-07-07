@@ -8,6 +8,7 @@ const chart = document.querySelector("#forecast-chart");
 const ctx = chart.getContext("2d");
 
 const briefEl = document.querySelector("#forecast-brief");
+const currentBand = document.querySelector("#current-band");
 const summaryBand = document.querySelector("#summary-band");
 const calibrationBand = document.querySelector("#calibration-band");
 const chartSection = document.querySelector("#chart-section");
@@ -23,6 +24,14 @@ const briefHeadline = document.querySelector("#brief-headline");
 const briefDetail = document.querySelector("#brief-detail");
 const briefActions = document.querySelector("#brief-actions");
 const briefWatch = document.querySelector("#brief-watch");
+const currentTemp = document.querySelector("#current-temp");
+const currentDescription = document.querySelector("#current-description");
+const currentOpenWeather = document.querySelector("#current-openweather");
+const currentOpenWeatherMeta = document.querySelector("#current-openweather-meta");
+const currentOpenMeteo = document.querySelector("#current-openmeteo");
+const currentOpenMeteoMeta = document.querySelector("#current-openmeteo-meta");
+const currentGap = document.querySelector("#current-gap");
+const currentNote = document.querySelector("#current-note");
 const locationLabel = document.querySelector("#location-label");
 const stationLabel = document.querySelector("#station-label");
 const distanceLabel = document.querySelector("#distance-label");
@@ -87,6 +96,7 @@ async function loadForecast(city) {
   const button = form.querySelector("button");
   button.disabled = true;
   briefEl.classList.add("is-hidden");
+  currentBand.classList.add("is-hidden");
   summaryBand.classList.add("is-hidden");
   calibrationBand.classList.add("is-hidden");
   chartSection.classList.add("is-hidden");
@@ -104,6 +114,7 @@ async function loadForecast(city) {
       throw new Error(payload.error || "Forecast konnte nicht geladen werden");
     }
     renderOverview(payload.overview);
+    renderCurrent(payload.current);
     renderSummary(payload);
     renderCalibration(payload.calibration);
     renderComparison(payload.days);
@@ -113,6 +124,7 @@ async function loadForecast(city) {
     lastDays = payload.days;
     currentPayload = payload;
     briefEl.classList.remove("is-hidden");
+    currentBand.classList.remove("is-hidden");
     summaryBand.classList.remove("is-hidden");
     calibrationBand.classList.remove("is-hidden");
     viewTabs.classList.remove("is-hidden");
@@ -128,6 +140,7 @@ async function loadForecast(city) {
 function showIdle(message) {
   lastDays = [];
   briefEl.classList.add("is-hidden");
+  currentBand.classList.add("is-hidden");
   summaryBand.classList.add("is-hidden");
   calibrationBand.classList.add("is-hidden");
   chartSection.classList.add("is-hidden");
@@ -172,19 +185,23 @@ function renderLearningDashboard(payload) {
 
 function renderLearningCard(card) {
   const today = card.today || {};
+  const now = card.current?.best || {};
   const learning = card.learning || {};
   const confidence = today.confidence ?? 0;
   const confidenceClass = confidence >= 78 ? "high" : confidence >= 58 ? "medium" : "low";
+  const leadTemp = Number.isFinite(now.temperature_c) ? now.temperature_c : today.temperature_c;
+  const leadLabel = Number.isFinite(now.temperature_c) ? "jetzt" : "Tagesmittel";
   return `
     <article class="learning-card">
       <div class="learning-card-top">
         <div>
           <p class="date">${escapeHtml(card.location?.label || card.city)}</p>
-          <strong>${formatTemp(today.temperature_c)} · ${escapeHtml(today.condition || "-")}</strong>
+          <strong>${formatTemp(leadTemp)} ${leadLabel} · ${escapeHtml(now.description || today.condition || "-")}</strong>
         </div>
         <span class="badge ${confidenceClass}">${today.confidence ?? "-"}%</span>
       </div>
       <div class="learning-mini">
+        <span>Tagesmittel</span><strong>${formatTemp(today.temperature_c)}</strong>
         <span>Regen</span><strong>${Math.round((today.rain_probability || 0) * 100)}%</strong>
         <span>Index</span><strong>${today.rain_index ?? "-"} / 100</strong>
         <span>Lernen</span><strong>${escapeHtml(learning.status || "-")}</strong>
@@ -221,6 +238,30 @@ function renderOverview(overview) {
   briefDetail.textContent = [overview?.detail, overview?.station_note].filter(Boolean).join(" ");
   briefActions.innerHTML = renderList(overview?.actions || []);
   briefWatch.innerHTML = renderList(overview?.watch || []);
+}
+
+function renderCurrent(current) {
+  const best = current?.best || {};
+  const owm = current?.openweather || {};
+  const om = current?.open_meteo || {};
+  currentTemp.textContent = formatTemp(best.temperature_c);
+  currentDescription.textContent = `${best.source || "Jetzt-Wert"} · ${best.confidence || "unbekannt"} plausibel · ${best.description || "-"}`;
+  currentOpenWeather.textContent = formatTemp(owm.temperature_c);
+  currentOpenWeatherMeta.textContent = [
+    owm.description,
+    Number.isFinite(owm.feels_like_c) ? `gefühlt ${formatTemp(owm.feels_like_c)}` : "",
+    formatTime(owm.observed_at),
+  ].filter(Boolean).join(" · ") || "-";
+  currentOpenMeteo.textContent = formatTemp(om.temperature_c);
+  currentOpenMeteoMeta.textContent = [
+    om.description,
+    Number.isFinite(om.wind_mps) ? formatWind(om.wind_mps) : "",
+    formatTime(om.observed_at),
+  ].filter(Boolean).join(" · ") || "-";
+  currentGap.textContent = Number.isFinite(current?.temperature_gap_c)
+    ? `${current.temperature_gap_c.toFixed(1)}° Differenz`
+    : "keine Differenz berechnet";
+  currentNote.textContent = current?.explanation || current?.note || "Jetzt-Wert ist kein Tagesmittel.";
 }
 
 function renderSummary(payload) {
@@ -389,9 +430,10 @@ function renderDays(days) {
           <span class="badge ${confidenceClass}" title="${escapeHtml(confidenceTitle(day))}">${likely.confidence}%</span>
         </div>
         <div class="mini-grid">
+          <div class="mini"><span>Tagesmittel</span><strong>${formatTemp(likely.t_mean)}</strong></div>
           <div class="mini"><span>Spanne</span><strong>${formatTemp(likely.t_min)} bis ${formatTemp(likely.t_max)}</strong></div>
-          <div class="mini"><span>OpenWeather</span><strong>${formatTemp(day.openweather.t_mean)}</strong></div>
-          <div class="mini"><span>Open-Meteo</span><strong>${formatModel(day.open_meteo)}</strong></div>
+          <div class="mini"><span>OpenWeather Mittel</span><strong>${formatTemp(day.openweather.t_mean)}</strong></div>
+          <div class="mini"><span>Open-Meteo Mittel</span><strong>${formatModel(day.open_meteo)}</strong></div>
           <div class="mini"><span title="Mittelwert aus OpenWeather und Open-Meteo vor DWD-Korrektur">Modell-Mittel</span><strong>${formatTemp(day.model_consensus?.t_mean)}</strong></div>
           <div class="mini"><span>DWD-Korridor</span><strong>${formatTemp(day.pattern.t_low)} bis ${formatTemp(day.pattern.t_high)}</strong></div>
           <div class="mini"><span>Regen</span><strong>${Math.round(likely.rain_probability * 100)}%</strong></div>
@@ -620,6 +662,13 @@ function formatRainAmount(value) {
 
 function formatDate(value) {
   return new Date(`${value}T12:00:00`).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function formatTime(value) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatSigned(value, unit) {

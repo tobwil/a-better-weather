@@ -115,6 +115,7 @@ class WeatherHandler(BaseHTTPRequestHandler):
                     "location": compact["location"],
                     "station": compact["station"],
                     "generated_at": compact["generated_at"],
+                    "current": compact.get("current"),
                     "today": compact["days"][0] if compact["days"] else None,
                     "summary": compact["summary"],
                     "learning": payload["source"].get("learning"),
@@ -242,6 +243,7 @@ def compact_forecast_payload(payload: dict) -> dict:
         "location": payload["location"],
         "station": payload["station"],
         "generated_at": payload["source"]["generated_at"],
+        "current": payload.get("current"),
         "summary": payload["overview"],
         "feed": f"/feed.xml?city={urllib.parse.quote(payload['location']['label'])}",
         "days": [
