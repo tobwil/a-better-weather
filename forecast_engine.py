@@ -1136,8 +1136,8 @@ def build_overview(label: str, station: Station, days: list[dict[str, Any]], cur
     current_temp = (current or {}).get("best", {}).get("temperature_c")
     if current_temp is not None:
         headline = (
-            f"{label}: jetzt {current_temp:.1f}°, heute {likely_first['condition'].lower()}, "
-            f"{likely_first['t_mean']:.1f}° im Tagesmittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
+            f"{label}: aktuell {current_temp:.1f}°. Rest des Tages: {likely_first['condition'].lower()}, "
+            f"{likely_first['t_mean']:.1f}° im Forecast-Mittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
         )
     else:
         headline = (
@@ -1145,7 +1145,7 @@ def build_overview(label: str, station: Station, days: list[dict[str, Any]], cur
             f"{likely_first['t_mean']:.1f}° im Tagesmittel, {round(likely_first['rain_probability'] * 100)}% Regenrisiko."
         )
     detail = (
-        f"Jetzt-Wert und Tagesmittel sind unterschiedliche Größen. "
+        f"Jetzt-Wert und Forecast sind unterschiedliche Größen; der heutige Forecast beschreibt den restlichen Tagesverlauf. "
         f"Wärmster Tag: {format_day_label(warmest['date'])} mit bis zu {warmest['likely'].get('t_max', warmest['likely']['t_mean']):.1f}°. "
         f"Höchstes Regenrisiko: {format_day_label(wettest['date'])} mit {round(wettest['likely']['rain_probability'] * 100)}%. "
         f"Confidence im Mittel: {avg_confidence}%; unsicherster Tag: {format_day_label(weakest['date'])} ({weakest['likely']['confidence']}%)."

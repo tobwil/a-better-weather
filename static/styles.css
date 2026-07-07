@@ -150,6 +150,41 @@ button:disabled {
   font-size: 1.25rem;
 }
 
+.learning-current {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: #eef8f5;
+}
+
+.learning-current span {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.learning-current strong {
+  color: var(--ink);
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 0.95;
+  font-weight: 950;
+}
+
+.learning-current em {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.learning-current.missing {
+  border-color: var(--line);
+  background: #f8faf8;
+}
+
 .learning-mini {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -610,6 +645,12 @@ tr:last-child td {
   align-content: start;
 }
 
+.day-card.is-today-current {
+  border-width: 2px;
+  border-color: var(--accent);
+  background: linear-gradient(180deg, #eef8f5 0, #ffffff 190px);
+}
+
 .day-top {
   display: flex;
   justify-content: space-between;
@@ -626,7 +667,7 @@ tr:last-child td {
 
 .value-kind {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: var(--accent);
   font-size: 0.74rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -634,7 +675,7 @@ tr:last-child td {
 
 .temp {
   margin: 3px 0 0;
-  font-size: 2.1rem;
+  font-size: clamp(2.3rem, 4vw, 3.8rem);
   line-height: 1;
   font-weight: 900;
 }
@@ -665,6 +706,27 @@ tr:last-child td {
 
 .badge.low {
   background: var(--red);
+}
+
+.today-forecast-note {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.today-forecast-note span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.today-forecast-note strong {
+  font-size: 0.94rem;
+  line-height: 1.3;
 }
 
 .mini-grid {

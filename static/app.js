@@ -186,22 +186,36 @@ function renderLearningDashboard(payload) {
 function renderLearningCard(card) {
   const today = card.today || {};
   const now = card.current?.best || {};
+  const observedAt = card.current?.openweather?.observed_at || card.current?.open_meteo?.observed_at;
   const learning = card.learning || {};
   const confidence = today.confidence ?? 0;
   const confidenceClass = confidence >= 78 ? "high" : confidence >= 58 ? "medium" : "low";
-  const leadTemp = Number.isFinite(now.temperature_c) ? now.temperature_c : today.temperature_c;
-  const leadLabel = Number.isFinite(now.temperature_c) ? "jetzt" : "Tagesmittel";
+  const hasCurrent = Number.isFinite(now.temperature_c);
   return `
     <article class="learning-card">
       <div class="learning-card-top">
         <div>
           <p class="date">${escapeHtml(card.location?.label || card.city)}</p>
-          <strong>${formatTemp(leadTemp)} ${leadLabel} · ${escapeHtml(now.description || today.condition || "-")}</strong>
+          <strong>${escapeHtml(now.description || today.condition || "-")}</strong>
         </div>
         <span class="badge ${confidenceClass}">${today.confidence ?? "-"}%</span>
       </div>
+      ${hasCurrent ? `
+        <div class="learning-current">
+          <span>Aktuelle Temperatur</span>
+          <strong>${formatTemp(now.temperature_c)}</strong>
+          <em>${escapeHtml(now.source || "Jetzt-Wert")}${formatTime(observedAt) ? ` · ${formatTime(observedAt)}` : ""}</em>
+        </div>
+      ` : `
+        <div class="learning-current missing">
+          <span>Aktuelle Temperatur</span>
+          <strong>-</strong>
+          <em>kein Current-Wert verfügbar</em>
+        </div>
+      `}
       <div class="learning-mini">
-        <span>Tagesmittel</span><strong>${formatTemp(today.temperature_c)}</strong>
+        <span>Rest heute Mittel</span><strong>${formatTemp(today.temperature_c)}</strong>
+        <span>Heute Spanne</span><strong>${formatTemp(today.temperature_min_c)} bis ${formatTemp(today.temperature_max_c)}</strong>
         <span>Regen</span><strong>${Math.round((today.rain_probability || 0) * 100)}%</strong>
         <span>Index</span><strong>${today.rain_index ?? "-"} / 100</strong>
         <span>Lernen</span><strong>${escapeHtml(learning.status || "-")}</strong>
@@ -420,8 +434,9 @@ function renderDays(days, current) {
     const confidenceClass = likely.confidence >= 78 ? "high" : likely.confidence >= 58 ? "medium" : "low";
     const date = new Date(`${day.date}T12:00:00Z`);
     const dateLabel = date.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+    const isToday = index === 0 && Number.isFinite(current?.best?.temperature_c);
     return `
-      <article class="day-card">
+      <article class="day-card ${isToday ? "is-today-current" : ""}">
         <div class="day-top">
           <div>
             <p class="date">${dateLabel}</p>
@@ -431,11 +446,17 @@ function renderDays(days, current) {
           </div>
           <span class="badge ${confidenceClass}" title="${escapeHtml(confidenceTitle(day))}">${likely.confidence}%</span>
         </div>
+        ${isToday ? `
+          <div class="today-forecast-note">
+            <span>Forecast heute</span>
+            <strong>Rest des Tages: ${formatTemp(likely.t_mean)} im Mittel, bis ${formatTemp(likely.t_max)}, ${Math.round((likely.rain_probability || 0) * 100)}% Regen</strong>
+          </div>
+        ` : ""}
         <div class="mini-grid">
-          <div class="mini"><span>Tagesmittel</span><strong>${formatTemp(likely.t_mean)}</strong></div>
+          <div class="mini"><span>${isToday ? "Rest heute Mittel" : "Tagesmittel"}</span><strong>${formatTemp(likely.t_mean)}</strong></div>
           <div class="mini"><span>Spanne</span><strong>${formatTemp(likely.t_min)} bis ${formatTemp(likely.t_max)}</strong></div>
-          <div class="mini"><span>OpenWeather Mittel</span><strong>${formatTemp(day.openweather.t_mean)}</strong></div>
-          <div class="mini"><span>Open-Meteo Mittel</span><strong>${formatModel(day.open_meteo)}</strong></div>
+          <div class="mini"><span>OpenWeather Forecast</span><strong>${formatTemp(day.openweather.t_mean)}</strong></div>
+          <div class="mini"><span>Open-Meteo Forecast</span><strong>${formatModel(day.open_meteo)}</strong></div>
           <div class="mini"><span title="Mittelwert aus OpenWeather und Open-Meteo vor DWD-Korrektur">Modell-Mittel</span><strong>${formatTemp(day.model_consensus?.t_mean)}</strong></div>
           <div class="mini"><span>DWD-Korridor</span><strong>${formatTemp(day.pattern.t_low)} bis ${formatTemp(day.pattern.t_high)}</strong></div>
           <div class="mini"><span>Regen</span><strong>${Math.round(likely.rain_probability * 100)}%</strong></div>
@@ -462,9 +483,9 @@ function primaryDayDisplay(day, current, index) {
     const observedAt = current?.openweather?.observed_at || current?.open_meteo?.observed_at;
     const time = formatTime(observedAt);
     return {
-      label: time ? `Jetzt · ${time}` : "Jetzt",
+      label: time ? `Aktuelle Temperatur · ${time}` : "Aktuelle Temperatur",
       temperature: best.temperature_c,
-      condition: `Realwert · ${best.description || likely.condition || "-"}`,
+      condition: `Realwert jetzt · ${best.source || "Current"} · ${best.description || likely.condition || "-"}`,
     };
   }
   return {
