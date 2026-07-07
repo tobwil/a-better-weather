@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>a better weather</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="Forecast Auswahl">
+        <div>
+          <p class="eyebrow">DWD x OpenWeather x Open-Meteo</p>
+          <h1>a better weather</h1>
+        </div>
+        <form id="forecast-form" class="search-row">
+          <label>
+            <span>Ort</span>
+            <input id="city-input" name="city" placeholder="z. B. Berlin, Hamburg, Freiburg" autocomplete="address-level2">
+          </label>
+          <button type="submit">Forecast bauen</button>
+        </form>
+      </section>
+
+      <section id="learning-home" class="learning-home">
+        <div class="section-heading">
+          <span class="metric-label">Lernpfad</span>
+          <h2>Tägliche Trainingsstädte</h2>
+        </div>
+        <form id="learning-form" class="learning-form">
+          <label>
+            <span>Stadt hinzufügen</span>
+            <input id="learning-city-input" placeholder="z. B. Würzburg, Kassel, Augsburg" autocomplete="address-level2">
+          </label>
+          <button type="submit">Hinzufügen</button>
+        </form>
+        <div id="learning-cards" class="learning-cards" aria-live="polite"></div>
+      </section>
+
+      <section id="forecast-brief" class="forecast-brief is-hidden">
+        <div>
+          <span class="metric-label">Kurzfazit</span>
+          <h2 id="brief-headline">-</h2>
+          <p id="brief-detail">-</p>
+        </div>
+        <div class="brief-columns">
+          <div>
+            <span class="metric-label">Was tun?</span>
+            <ul id="brief-actions"></ul>
+          </div>
+          <div>
+            <span class="metric-label">Worauf achten?</span>
+            <ul id="brief-watch"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="summary-band" class="summary-band is-hidden">
+        <div>
+          <span class="metric-label">Ort</span>
+          <strong id="location-label">-</strong>
+        </div>
+        <div>
+          <span class="metric-label">DWD-Station</span>
+          <strong id="station-label">-</strong>
+        </div>
+        <div>
+          <span class="metric-label">Distanz</span>
+          <strong id="distance-label">-</strong>
+        </div>
+        <div>
+          <span class="metric-label">Quelle</span>
+          <strong id="source-label">-</strong>
+        </div>
+      </section>
+
+      <section id="calibration-band" class="calibration-band is-hidden">
+        <span class="metric-label">Kalibrierung</span>
+        <strong id="calibration-title">-</strong>
+        <p id="calibration-detail">-</p>
+      </section>
+
+      <nav id="view-tabs" class="view-tabs is-hidden" aria-label="Ansicht wählen">
+        <button type="button" class="tab-button is-active" data-view="overview">Forecast</button>
+        <button type="button" class="tab-button" data-view="nerd">Nerd Deep Dive</button>
+      </nav>
+
+      <section id="chart-section" class="chart-section is-hidden">
+        <canvas id="forecast-chart" width="980" height="320" aria-label="Temperaturvergleich"></canvas>
+      </section>
+
+      <section id="comparison-section" class="comparison-section is-hidden">
+        <div class="section-heading">
+          <span class="metric-label">Modellvergleich</span>
+          <h2>OpenWeather, Open-Meteo, DWD und wahrscheinlicher Forecast</h2>
+        </div>
+        <div class="comparison-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tag</th>
+                <th>OpenWeather</th>
+                <th>Open-Meteo</th>
+                <th>Modell-Mittel</th>
+                <th>DWD-Korridor</th>
+                <th>Wahrscheinlicher Forecast</th>
+                <th>Regenbewertung</th>
+              </tr>
+            </thead>
+            <tbody id="comparison-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="hourly-section" class="hourly-section is-hidden">
+        <div class="section-heading">
+          <span class="metric-label">Nächste Stunden</span>
+          <h2>Temperatur, Regenfenster und Wind</h2>
+        </div>
+        <div id="hourly-list" class="hourly-list"></div>
+      </section>
+
+      <section id="method-note" class="method-note is-hidden">
+        <strong>Modell-Mittel</strong> ist der Durchschnitt aus OpenWeather und Open-Meteo. Die Confidence-Balken bedeuten: Modelle = Einigkeit der Wettermodelle, DWD-Fit = Temperatur passt zur lokalen Historie, Regen = Modellregen passt zum DWD-Regenrisiko, Daten = historische Stichprobe, Horizont = Nähe des Vorhersagetags.
+      </section>
+
+      <section id="nerd-section" class="nerd-section is-hidden">
+        <div class="section-heading">
+          <span class="metric-label">Modell Deep Dive</span>
+          <h2>Rechenweg, Abweichungen und Schnittstellen</h2>
+        </div>
+        <div id="methodology-warning" class="methodology-warning"></div>
+        <div id="nerd-links" class="nerd-links"></div>
+        <div id="nerd-days" class="nerd-days"></div>
+      </section>
+
+      <section id="days" class="day-grid" aria-live="polite"></section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
