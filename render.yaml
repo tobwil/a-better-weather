@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: a-better-weather-api
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python3 server.py
+    healthCheckPath: /api/learning
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: OPENWEATHER_API_KEY
+        sync: false

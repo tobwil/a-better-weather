@@ -18,19 +18,33 @@ Warum Proxy statt komplette Netlify-Portierung: Die App nutzt DWD-Downloads, lok
 git push -u origin kisruptiv
 ```
 
-2. Python-Backend deployen.
+2. Python-Backend kostenlos auf Render deployen.
 
-Nutze zum Beispiel Render, Fly.io, Railway, einen VPS oder einen internen Server. Dort muss laufen:
+Empfohlen fuer den Start: Render Free Web Service. Render bietet kostenlose Web Services fuer Python, hat aber Free-Limits: Nach 15 Minuten ohne Traffic spinnt der Dienst herunter und der naechste Request braucht ungefaehr eine Minute zum Aufwachen. Ausserdem ist das lokale Dateisystem ephemeral; DWD-Cache und Lernarchiv koennen bei Neustart/Redeploy verloren gehen. Fuer Demo/Hobby ok, fuer echtes Langzeit-Lernen spaeter mit persistenter Datenbank/Storage nachruesten.
 
-```bash
-export OPENWEATHER_API_KEY="dein-openweather-key"
-python3 server.py
-```
+Render-Setup:
 
-Das Backend muss von Netlify aus per HTTPS erreichbar sein, zum Beispiel:
+- Render öffnen: `https://dashboard.render.com/`
+- `New` -> `Web Service`
+- GitHub-Repo `tobwil/a-better-weather` verbinden
+- Branch: `kisruptiv`
+- Runtime: Python
+- Build Command leer lassen
+- Start Command: `python3 server.py`
+- Instance Type: `Free`
+- Environment Variable setzen:
 
 ```text
-https://weather-api.example.com
+OPENWEATHER_API_KEY=dein-openweather-key
+HOST=0.0.0.0
+```
+
+`render.yaml` ist bereits enthalten und setzt `HOST=0.0.0.0`; den OpenWeather-Key musst du in Render als Secret setzen.
+
+Nach dem Deploy bekommst du eine Render-URL:
+
+```text
+https://a-better-weather-api.onrender.com
 ```
 
 3. Netlify-Projekt anlegen.
@@ -49,6 +63,12 @@ In Netlify unter `Site configuration` -> `Environment variables`:
 
 ```text
 WEATHER_BACKEND_URL=https://weather-api.example.com
+```
+
+Hier die echte Render-URL einsetzen, zum Beispiel:
+
+```text
+WEATHER_BACKEND_URL=https://a-better-weather-api.onrender.com
 ```
 
 Kein Slash am Ende ist sauberer, die Function toleriert ihn aber.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import threading
 import time
 import urllib.parse
@@ -15,8 +16,8 @@ from forecast_engine import CACHE_DIR, build_forecast, nearest_station, normaliz
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8765"))
 LEARNING_CITIES_PATH = CACHE_DIR / "learning_cities.json"
 DEFAULT_LEARNING_CITIES = ["Berlin", "Muenchen", "Nuernberg", "Hamburg", "Coburg"]
 

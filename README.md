@@ -30,6 +30,12 @@ export OPENWEATHER_API_KEY="dein-key"
 python3 server.py
 ```
 
+Für Hosting-Plattformen wie Render kann der Server per Environment konfiguriert werden:
+
+```bash
+HOST=0.0.0.0 PORT=10000 OPENWEATHER_API_KEY="dein-key" python3 server.py
+```
+
 Dann öffnen:
 
 ```text
