@@ -200,7 +200,7 @@ function renderLearningCard(card) {
   const today = card.today || {};
   const now = card.current?.best || {};
   const observedAt = card.current?.openweather?.observed_at || card.current?.open_meteo?.observed_at;
-  const learning = card.learning || {};
+  const insight = learningCardInsight(card);
   const confidence = today.confidence ?? 0;
   const confidenceClass = confidence >= 78 ? "high" : confidence >= 58 ? "medium" : "low";
   const hasCurrent = Number.isFinite(now.temperature_c);
@@ -231,16 +231,41 @@ function renderLearningCard(card) {
         <span>Heute Spanne</span><strong>${formatTemp(today.temperature_min_c)} bis ${formatTemp(today.temperature_max_c)}</strong>
         <span>Regen</span><strong>${Math.round((today.rain_probability || 0) * 100)}%</strong>
         <span>Index</span><strong>${today.rain_index ?? "-"} / 100</strong>
-        <span>Lernen</span><strong>${escapeHtml(learning.status || "-")}</strong>
-        <span>Fälle</span><strong>${learning.cases ?? 0}</strong>
+        <span>Confidence</span><strong>${today.confidence ?? "-"}%</strong>
+        <span>Signal</span><strong>${escapeHtml(today.rain_level || "unauffällig")}</strong>
       </div>
-      <p>${escapeHtml(learning.summary || "Lernpfad aktiv.")}</p>
+      <p>${escapeHtml(insight)}</p>
       <div class="learning-actions">
         <button type="button" data-open-city="${escapeHtml(card.city)}">Öffnen</button>
         <button type="button" class="ghost-button" data-remove-city="${escapeHtml(card.city)}">Aus Lernpfad entfernen</button>
       </div>
     </article>
   `;
+}
+
+function learningCardInsight(card) {
+  const today = card.today || {};
+  const now = card.current?.best || {};
+  const currentTemp = now.temperature_c;
+  const forecastTemp = today.temperature_c;
+  const rain = today.rain_probability || 0;
+  const confidence = today.confidence || 0;
+  if (Number.isFinite(currentTemp) && Number.isFinite(forecastTemp)) {
+    const gap = currentTemp - forecastTemp;
+    if (Math.abs(gap) >= 2.5) {
+      return `Jetzt ${gap > 0 ? "deutlich wärmer" : "deutlich kühler"} als das Resttagesmittel. Der Forecast bleibt deshalb als Tagesverlauf zu lesen, nicht als Jetztwert.`;
+    }
+  }
+  if (rain >= 0.55) {
+    return `${Math.round(rain * 100)}% Regenrisiko: Regenfenster prüfen, bevor du dich auf trockene Phasen verlässt.`;
+  }
+  if (rain <= 0.2) {
+    return `Kaum Regensignal für den Rest des Tages. Spannender ist hier die Temperaturentwicklung.`;
+  }
+  if (confidence < 60) {
+    return `Modelle sind heute weniger einig. Öffnen zeigt, ob Temperatur, Regen oder DWD-Muster den Forecast unsicher machen.`;
+  }
+  return `Aktuelle Lage und Resttagesforecast passen ordentlich zusammen. Öffnen zeigt den Modellvergleich im Detail.`;
 }
 
 function setActiveView(view) {
@@ -346,7 +371,7 @@ function renderNerd(payload) {
   const learning = payload.source?.learning || {};
   const weights = learning.weights || {};
   methodologyWarning.innerHTML = `
-    <strong>Lernmodell aktiv:</strong> ${escapeHtml(learning.summary || "Die App sammelt tägliche Forecast-Snapshots und kalibriert die Gewichte gegen DWD-Istwerte.")}
+    <strong>Lernmodell aktiv:</strong> ${escapeHtml(learning.summary || "Die App vergleicht gespeicherte Vorhersagen mit späteren offiziellen Tageswerten und passt die Gewichte lokal an.")}
     Aktive Gewichte: Temperatur ${formatNumber(weights.temp_model)}, Regen-Wahrscheinlichkeit ${formatNumber(weights.rain_probability_model)}, Regenmenge ${formatNumber(weights.rain_amount_model)}.
   `;
   nerdLinks.innerHTML = `

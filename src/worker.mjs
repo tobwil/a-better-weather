@@ -135,7 +135,7 @@ async function handleLearningCards(env) {
           ).bind(normalized, localDate(new Date())).first()
         : null;
       if (!row) {
-        errors.push({ city, error: "Noch kein D1-Snapshot vorhanden. Bitte einmal öffnen oder den nächsten Cron-Lauf abwarten." });
+        errors.push({ city, error: "Noch kein aktueller Lernwert vorhanden. Bitte einmal öffnen oder den nächsten automatischen Lauf abwarten." });
         continue;
       }
       cards.push(await dashboardCardFromSnapshot(env, city, row));
@@ -166,18 +166,18 @@ async function dashboardCardFromSnapshot(env, city, row) {
     current,
     today,
     summary: {
-      headline: `${row.city}: gespeicherter D1-Forecast`,
-      detail: "Startkachel nutzt gespeicherte D1-Snapshots plus leichten Current-Weather-Abruf.",
+      headline: `${row.city}: aktuelle Lage und Resttagesforecast`,
+      detail: "Startkachel zeigt den Jetztwert und den zuletzt berechneten Resttagesforecast.",
       station_note: `DWD-Referenz: ${row.station_name}.`,
       actions: [],
       watch: [],
     },
     learning: {
-      status: row.verified_at ? "verified" : "learning_enabled",
+      status: row.verified_at ? "bewertet" : "aktiv",
       cases: row.verified_at ? 1 : 0,
       summary: row.verified_at
-        ? "Dieser Forecast-Snapshot wurde bereits gegen einen DWD-Istwert verifiziert."
-        : "Forecast-Snapshot in D1 gespeichert; Verifizierung folgt automatisch gegen DWD-Istwerte.",
+        ? "Dieser Tag wurde bereits gegen den DWD-Istwert bewertet."
+        : "Automatische Bewertung aktiv, sobald der offizielle Tageswert verfügbar ist.",
     },
   };
 }
@@ -291,7 +291,7 @@ async function buildForecast(env, params) {
       observations: observations.length,
       method: "OpenWeather und Open-Meteo Konsens, lokal mit DWD-Klimatologie, aktueller Stationsanomalie und gelernten D1-Backtests kalibriert.",
       weighting_status: "learning_enabled",
-      weighting_note: "Cloudflare D1 speichert Forecast-Snapshots und verifizierte Istwerte dauerhaft. Gewichte werden aus verifizierten Fehlern je DWD-Station abgeleitet.",
+      weighting_note: "Die App speichert Vorhersagen dauerhaft, vergleicht sie später mit offiziellen Tageswerten und lernt daraus lokale Gewichte je DWD-Station.",
       learning,
     },
     current,
