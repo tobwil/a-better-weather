@@ -48,6 +48,9 @@ export default {
       if (url.pathname === "/health") {
         return jsonResponse({ ok: true, service: "a better weather", runtime: "cloudflare-worker" });
       }
+      if (url.pathname === "/") {
+        return fetchAsset(request, env, "/index.html");
+      }
       if (url.pathname === "/api/forecast") {
         return handleForecast(url, env, false);
       }
@@ -118,18 +121,17 @@ async function handleLearningDashboard(env, ctx) {
   const errors = [];
   for (const city of cities) {
     try {
-      const payload = await buildForecast(env, { city });
-      cards.push({
-        city,
-        location: payload.location,
-        station: payload.station,
-        generated_at: payload.source.generated_at,
-        current: payload.current,
-        today: compactDay(payload.days[0]),
-        summary: payload.overview,
-        learning: payload.source.learning,
-      });
-      ctx?.waitUntil?.(archiveForecast(env, payload));
+      const normalized = normalizeCity(city);
+      const row = env.DB
+        ? await env.DB.prepare(
+            "SELECT * FROM forecast_snapshots WHERE normalized_city = ? AND target_date = ? ORDER BY generated_at DESC LIMIT 1"
+          ).bind(normalized, localDate(new Date())).first()
+        : null;
+      if (!row) {
+        errors.push({ city, error: "Noch kein D1-Snapshot vorhanden. Die Startseite lädt diese Stadt separat." });
+        continue;
+      }
+      cards.push(dashboardCardFromSnapshot(city, row));
     } catch (error) {
       errors.push({ city, error: publicError(error) });
     }
@@ -140,6 +142,36 @@ async function handleLearningDashboard(env, ctx) {
     errors,
     generated_at: new Date().toUTCString(),
   });
+}
+
+function dashboardCardFromSnapshot(city, row) {
+  const today = JSON.parse(row.payload_json || "{}");
+  return {
+    city,
+    location: { label: row.city },
+    station: {
+      id: row.station_id,
+      name: row.station_name,
+      distance_km: null,
+    },
+    generated_at: row.generated_at,
+    current: null,
+    today,
+    summary: {
+      headline: `${row.city}: gespeicherter D1-Forecast`,
+      detail: "Dashboard nutzt gespeicherte Snapshots; die Startseite lädt Current Weather pro Stadt separat.",
+      station_note: `DWD-Referenz: ${row.station_name}.`,
+      actions: [],
+      watch: [],
+    },
+    learning: {
+      status: row.verified_at ? "verified" : "learning_enabled",
+      cases: row.verified_at ? 1 : 0,
+      summary: row.verified_at
+        ? "Dieser Forecast-Snapshot wurde bereits gegen einen DWD-Istwert verifiziert."
+        : "Forecast-Snapshot in D1 gespeichert; Verifizierung folgt automatisch gegen DWD-Istwerte.",
+    },
+  };
 }
 
 async function handleLearningAdd(url, env) {
@@ -324,9 +356,9 @@ async function nearestStation(env, lat, lon) {
 }
 
 async function loadStations(env) {
-  const text = await fetchTextCached(
+  const text = await fetchLatin1BytesTextCached(
     env,
-    "dwd:stations",
+    "dwd:stations:latin1:v3",
     `${DWD_DAILY_BASE}/recent/KL_Tageswerte_Beschreibung_Stationen.txt`,
     86400
   );
@@ -940,6 +972,25 @@ async function fetchTextCached(env, key, url, ttl) {
   if (!response.ok) throw new Error(`Quelle nicht erreichbar (${response.status})`);
   const text = await response.text();
   await writeCache(env, key, text, ttl);
+  return text;
+}
+
+async function fetchLatin1BytesTextCached(env, key, url, ttl) {
+  const cached = await readCache(env, key);
+  if (cached) return cached;
+  const response = await fetch(url, { headers: { "user-agent": "a-better-weather/1.0" } });
+  if (!response.ok) throw new Error(`Quelle nicht erreichbar (${response.status})`);
+  const text = decodeLatin1(new Uint8Array(await response.arrayBuffer()));
+  await writeCache(env, key, text, ttl);
+  return text;
+}
+
+function decodeLatin1(bytes) {
+  let text = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    text += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
   return text;
 }
 

@@ -154,17 +154,63 @@ function showIdle(message) {
 }
 
 async function loadLearningDashboard() {
-  learningCards.innerHTML = `<div class="loading">Lernstädte werden geladen und für heute archiviert...</div>`;
+  learningCards.innerHTML = `<div class="loading">Lernstädte werden geladen...</div>`;
   try {
-    const response = await fetch("/api/learning/dashboard");
+    const response = await fetch("/api/learning");
     const payload = await response.json();
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Lernpfad konnte nicht geladen werden");
     }
-    renderLearningDashboard(payload);
+    await renderLearningCities(payload.cities || []);
   } catch (error) {
     learningCards.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
   }
+}
+
+async function renderLearningCities(cities) {
+  if (!cities.length) {
+    learningCards.innerHTML = `<div class="empty-state">Noch keine Lernstädte ausgewählt.</div>`;
+    return;
+  }
+  learningCards.innerHTML = cities.map(renderLearningLoadingCard).join("");
+  const cards = [];
+  const errors = [];
+  for (const city of cities) {
+    try {
+      const response = await fetch(`/api/forecast/compact?city=${encodeURIComponent(city)}`);
+      const payload = await response.json();
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || "Forecast konnte nicht geladen werden");
+      }
+      cards.push({
+        city,
+        location: payload.location,
+        station: payload.station,
+        generated_at: payload.generated_at,
+        current: payload.current,
+        today: payload.days?.[0],
+        summary: payload.summary,
+        learning: {
+          status: "learning_enabled",
+          cases: "-",
+          summary: "Forecast-Snapshot in D1 gespeichert; Verifizierung folgt automatisch gegen DWD-Istwerte.",
+        },
+      });
+    } catch (error) {
+      errors.push({ city, error: error.message });
+    }
+    renderLearningDashboard({ cards, errors });
+  }
+}
+
+function renderLearningLoadingCard(city) {
+  return `
+    <article class="learning-card">
+      <p class="date">${escapeHtml(city)}</p>
+      <strong>Wird geladen...</strong>
+      <p>Current Weather, Forecast und DWD-Muster werden separat geladen.</p>
+    </article>
+  `;
 }
 
 function renderLearningDashboard(payload) {
