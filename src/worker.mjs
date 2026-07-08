@@ -63,6 +63,9 @@ export default {
       if (url.pathname === "/api/learning") {
         return jsonResponse({ cities: await loadLearningCities(env) });
       }
+      if (url.pathname === "/api/learning/cards") {
+        return handleLearningCards(env);
+      }
       if (url.pathname === "/api/learning/dashboard") {
         return handleLearningDashboard(env, ctx);
       }
@@ -116,6 +119,10 @@ async function handleStation(url, env) {
 }
 
 async function handleLearningDashboard(env, ctx) {
+  return handleLearningCards(env);
+}
+
+async function handleLearningCards(env) {
   const cities = await loadLearningCities(env);
   const cards = [];
   const errors = [];
@@ -128,10 +135,10 @@ async function handleLearningDashboard(env, ctx) {
           ).bind(normalized, localDate(new Date())).first()
         : null;
       if (!row) {
-        errors.push({ city, error: "Noch kein D1-Snapshot vorhanden. Die Startseite lädt diese Stadt separat." });
+        errors.push({ city, error: "Noch kein D1-Snapshot vorhanden. Bitte einmal öffnen oder den nächsten Cron-Lauf abwarten." });
         continue;
       }
-      cards.push(dashboardCardFromSnapshot(city, row));
+      cards.push(await dashboardCardFromSnapshot(env, city, row));
     } catch (error) {
       errors.push({ city, error: publicError(error) });
     }
@@ -144,8 +151,9 @@ async function handleLearningDashboard(env, ctx) {
   });
 }
 
-function dashboardCardFromSnapshot(city, row) {
+async function dashboardCardFromSnapshot(env, city, row) {
   const today = JSON.parse(row.payload_json || "{}");
+  const current = await currentForCity(env, city);
   return {
     city,
     location: { label: row.city },
@@ -155,11 +163,11 @@ function dashboardCardFromSnapshot(city, row) {
       distance_km: null,
     },
     generated_at: row.generated_at,
-    current: null,
+    current,
     today,
     summary: {
       headline: `${row.city}: gespeicherter D1-Forecast`,
-      detail: "Dashboard nutzt gespeicherte Snapshots; die Startseite lädt Current Weather pro Stadt separat.",
+      detail: "Startkachel nutzt gespeicherte D1-Snapshots plus leichten Current-Weather-Abruf.",
       station_note: `DWD-Referenz: ${row.station_name}.`,
       actions: [],
       watch: [],
@@ -172,6 +180,19 @@ function dashboardCardFromSnapshot(city, row) {
         : "Forecast-Snapshot in D1 gespeichert; Verifizierung folgt automatisch gegen DWD-Istwerte.",
     },
   };
+}
+
+async function currentForCity(env, city) {
+  try {
+    const [lat, lon] = await resolveLocation(env, { city });
+    const [openweatherCurrent, openMeteo] = await Promise.all([
+      fetchOpenWeatherCurrent(env, lat, lon),
+      fetchOpenMeteoForecast(env, lat, lon),
+    ]);
+    return buildCurrentConditions(openweatherCurrent, openMeteo);
+  } catch (_error) {
+    return null;
+  }
 }
 
 async function handleLearningAdd(url, env) {
