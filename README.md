@@ -39,6 +39,10 @@ http://127.0.0.1:8765
 Ohne `OPENWEATHER_API_KEY` liefert die API bewusst einen Fehler. Die App verwendet im Produktivpfad keine Demo-Forecasts.
 Die Startseite lädt standardmäßig Trainingskacheln für Berlin, Muenchen, Nuernberg, Hamburg und Coburg. Eine freie Detailabfrage startet erst nach Ortseingabe und Klick auf `Forecast bauen`.
 
+## Netlify
+
+Der Branch `kisruptiv` enthält Footer-Branding und Netlify-Konfiguration. Netlify hostet dort das statische Frontend und proxyt `/api/*` sowie `/feed.xml` an ein separates Python-Backend. Details stehen in `NETLIFY_DEPLOY.md`.
+
 ## API
 
 ```text

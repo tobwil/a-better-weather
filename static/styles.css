@@ -31,6 +31,28 @@ body {
   padding: 28px 0 48px;
 }
 
+.site-footer {
+  width: min(1880px, calc(100vw - 56px));
+  margin: 0 auto;
+  padding: 0 0 28px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.site-footer a {
+  color: var(--accent);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
 .toolbar {
   display: flex;
   align-items: end;
@@ -894,6 +916,11 @@ tr:last-child td {
   .app-shell {
     width: min(100vw - 20px, 1180px);
     padding-top: 14px;
+  }
+
+  .site-footer {
+    width: min(100vw - 20px, 1180px);
+    display: grid;
   }
 
   .search-row {

@@ -1,0 +1,25 @@
+[build]
+  publish = "static"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/weather-proxy/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/feed.xml"
+  to = "/.netlify/functions/weather-proxy/feed.xml"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/static/*"
+  to = "/:splat"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
