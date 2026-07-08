@@ -101,7 +101,6 @@ async function handleForecast(url, env, compact) {
     return jsonResponse({ error: "Bitte Ort oder Koordinaten angeben." }, 400);
   }
   const payload = await buildForecast(env, params);
-  await archiveForecast(env, payload);
   return jsonResponse(compact ? compactForecastPayload(payload) : payload);
 }
 
@@ -959,20 +958,35 @@ async function refreshMetrics(env, stationId) {
 
 async function calibrationStatus(env, stationId) {
   if (!env.DB) return { status: "learning", snapshots: 0, summary: "D1 nicht gebunden; keine persistente Kalibrierung aktiv." };
-  const snapshot = await env.DB.prepare("SELECT COUNT(*) AS count FROM forecast_snapshots WHERE station_id = ?").bind(stationId).first();
+  const snapshot = await env.DB.prepare(
+    `SELECT
+      COUNT(*) AS rows,
+      COUNT(DISTINCT snapshot_date) AS run_days,
+      COUNT(DISTINCT normalized_city) AS cities,
+      SUM(CASE WHEN verified_at IS NULL THEN 1 ELSE 0 END) AS pending_rows
+     FROM forecast_snapshots
+     WHERE station_id = ?`
+  ).bind(stationId).first();
   const metric = await env.DB.prepare("SELECT * FROM model_metrics WHERE station_id = ?").bind(stationId).first();
   if (metric?.cases) {
     return {
       status: metric.cases >= MIN_TRAINING_CASES ? "active" : "learning",
-      snapshots: snapshot?.count || 0,
+      snapshots: snapshot?.rows || 0,
+      run_days: snapshot?.run_days || 0,
       evaluated_days: metric.cases,
       summary: `${metric.cases} bewertete Tage. MAE likely ${round(metric.temp_mae_likely, 2)}°, Regen-Brier ${round(metric.rain_brier_likely, 3)}. ${metric.cases >= MIN_TRAINING_CASES ? "Gelernte Gewichte aktiv." : "Noch in Aufwaermphase."}`,
     };
   }
+  const rows = snapshot?.rows || 0;
+  const runDays = snapshot?.run_days || 0;
+  const pendingRows = snapshot?.pending_rows || rows;
   return {
     status: "learning",
-    snapshots: snapshot?.count || 0,
-    summary: `${snapshot?.count || 0} Forecasts gespeichert. Verifizierung startet, sobald DWD-Istwerte fuer Zieltage verfuegbar sind.`,
+    snapshots: rows,
+    run_days: runDays,
+    summary: rows
+      ? `${rows} Vorhersagetage im Lernspeicher aus ${runDays} automatischen ${runDays === 1 ? "Lauf" : "Läufen"}. ${pendingRows} warten auf offizielle Tageswerte.`
+      : "Noch keine automatischen Lernläufe für diese DWD-Station gespeichert.",
   };
 }
 
