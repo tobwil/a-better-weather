@@ -45,9 +45,15 @@ http://127.0.0.1:8765
 Ohne `OPENWEATHER_API_KEY` liefert die API bewusst einen Fehler. Die App verwendet im Produktivpfad keine Demo-Forecasts.
 Die Startseite lädt standardmäßig Trainingskacheln für Berlin, Muenchen, Nuernberg, Hamburg und Coburg. Eine freie Detailabfrage startet erst nach Ortseingabe und Klick auf `Forecast bauen`.
 
-## Netlify
+## Cloudflare Deploy
 
-Der Branch `kisruptiv` enthält Footer-Branding und Netlify-Konfiguration. Netlify hostet dort das statische Frontend und proxyt `/api/*` sowie `/feed.xml` an ein separates Python-Backend. Details stehen in `NETLIFY_DEPLOY.md`.
+Der Branch `kisruptiv` ist die kostenlose, lernfaehige Hosting-Variante. Er nutzt Cloudflare Workers, Cloudflare D1 und Cron Triggers. Dadurch liegen Trainingsdaten dauerhaft in D1 statt in einem kurzlebigen Free-Server-Dateisystem.
+
+Details stehen in `CLOUDFLARE_DEPLOY.md`.
+
+## Netlify / Render
+
+Die fruehere Netlify/Render-Variante bleibt als Referenz im Repo, ist fuer echtes Lernen aber nicht mehr empfohlen. Render Free kann einschlafen und bietet keinen dauerhaft verlaesslichen lokalen Speicher fuer Trainingsdaten.
 
 ## API
 

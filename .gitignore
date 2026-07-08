@@ -1,6 +1,8 @@
 __pycache__/
 .venv/
 .weather_cache/
+node_modules/
+.wrangler/
+.wrangler-home/
 .DS_Store
 *.pyc
-

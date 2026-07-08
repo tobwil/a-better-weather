@@ -1,5 +1,7 @@
 # Netlify Deploy
 
+> Hinweis: Diese Variante ist nur noch Referenz. Fuer den `kisruptiv`-Branch ist `CLOUDFLARE_DEPLOY.md` die empfohlene kostenlose Loesung, weil Cloudflare D1 persistentes Lernen ohne Render-Free-Dateisystem ermoeglicht.
+
 Diese Branch-Variante hostet das Frontend auf Netlify und leitet API-Aufrufe über eine Netlify Function an die Python-Wetter-API weiter.
 
 ## Architektur
