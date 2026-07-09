@@ -227,7 +227,7 @@ function renderLearningCard(card) {
         </div>
       `}
       <div class="learning-mini">
-        <span>Rest heute Mittel</span><strong>${formatTemp(today.temperature_c)}</strong>
+        <span>Heute tagsüber</span><strong>${formatTemp(today.temperature_c)}</strong>
         <span>Heute Spanne</span><strong>${formatTemp(today.temperature_min_c)} bis ${formatTemp(today.temperature_max_c)}</strong>
         <span>Regen</span><strong>${Math.round((today.rain_probability || 0) * 100)}%</strong>
         <span>Index</span><strong>${today.rain_index ?? "-"} / 100</strong>
@@ -253,19 +253,19 @@ function learningCardInsight(card) {
   if (Number.isFinite(currentTemp) && Number.isFinite(forecastTemp)) {
     const gap = currentTemp - forecastTemp;
     if (Math.abs(gap) >= 2.5) {
-      return `Jetzt ${gap > 0 ? "deutlich wärmer" : "deutlich kühler"} als das Resttagesmittel. Der Forecast bleibt deshalb als Tagesverlauf zu lesen, nicht als Jetztwert.`;
+      return `Jetzt ${formatTemp(currentTemp)}, tagsüber eher um ${formatTemp(forecastTemp)}. Das heißt: Die Kachel zeigt oben den echten Momentanwert, darunter die Erwartung für den weiteren Tag.`;
     }
   }
   if (rain >= 0.55) {
-    return `${Math.round(rain * 100)}% Regenrisiko: Regenfenster prüfen, bevor du dich auf trockene Phasen verlässt.`;
+    return `${Math.round(rain * 100)}% Regenrisiko für den weiteren Tag. Öffnen zeigt, wann die nasseste Phase erwartet wird.`;
   }
   if (rain <= 0.2) {
-    return `Kaum Regensignal für den Rest des Tages. Spannender ist hier die Temperaturentwicklung.`;
+    return `Heute kaum Regensignal. Interessanter ist, wie stark die Temperatur im Tagesverlauf noch steigt oder fällt.`;
   }
   if (confidence < 60) {
-    return `Modelle sind heute weniger einig. Öffnen zeigt, ob Temperatur, Regen oder DWD-Muster den Forecast unsicher machen.`;
+    return `Heute sind die Modelle weniger einig. Öffnen zeigt, ob Temperatur, Regen oder lokale DWD-Historie den Forecast unsicher machen.`;
   }
-  return `Aktuelle Lage und Resttagesforecast passen ordentlich zusammen. Öffnen zeigt den Modellvergleich im Detail.`;
+  return `Momentanwert und Tagesausblick passen gut zusammen. Öffnen zeigt OpenWeather, Open-Meteo und DWD-Vergleich im Detail.`;
 }
 
 function setActiveView(view) {

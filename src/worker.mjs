@@ -957,7 +957,7 @@ async function refreshMetrics(env, stationId) {
 }
 
 async function calibrationStatus(env, stationId) {
-  if (!env.DB) return { status: "learning", snapshots: 0, summary: "D1 nicht gebunden; keine persistente Kalibrierung aktiv." };
+  if (!env.DB) return { status: "learning", snapshots: 0, summary: "Training ist nicht dauerhaft gespeichert. Gelernte Gewichte sind deshalb noch nicht aktiv." };
   const snapshot = await env.DB.prepare(
     `SELECT
       COUNT(*) AS rows,
@@ -974,19 +974,23 @@ async function calibrationStatus(env, stationId) {
       snapshots: snapshot?.rows || 0,
       run_days: snapshot?.run_days || 0,
       evaluated_days: metric.cases,
-      summary: `${metric.cases} bewertete Tage. MAE likely ${round(metric.temp_mae_likely, 2)}°, Regen-Brier ${round(metric.rain_brier_likely, 3)}. ${metric.cases >= MIN_TRAINING_CASES ? "Gelernte Gewichte aktiv." : "Noch in Aufwaermphase."}`,
+      summary: metric.cases >= MIN_TRAINING_CASES
+        ? `${metric.cases} Tage wurden schon mit echten DWD-Werten verglichen. Gelernte lokale Gewichte sind aktiv.`
+        : `${metric.cases} von ${MIN_TRAINING_CASES} nötigen Tagen sind bewertet. Bis dahin nutzt die App vorsichtige Startgewichte.`,
     };
   }
   const rows = snapshot?.rows || 0;
   const runDays = snapshot?.run_days || 0;
   const pendingRows = snapshot?.pending_rows || rows;
+  const dayLabel = pendingRows === 1 ? "Tag" : "Tage";
+  const runLabel = runDays === 1 ? "automatischer Trainingslauf" : "automatische Trainingsläufe";
   return {
     status: "learning",
     snapshots: rows,
     run_days: runDays,
     summary: rows
-      ? `${rows} Vorhersagetage im Lernspeicher aus ${runDays} automatischen ${runDays === 1 ? "Lauf" : "Läufen"}. ${pendingRows} warten auf offizielle Tageswerte.`
-      : "Noch keine automatischen Lernläufe für diese DWD-Station gespeichert.",
+      ? `${runDays} ${runLabel} gestartet. ${pendingRows} ${dayLabel} warten noch auf echte DWD-Messwerte; danach kann die App Treffer und Fehler bewerten.`
+      : "Für diese DWD-Station gibt es noch keinen automatischen Trainingslauf.",
   };
 }
 
