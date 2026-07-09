@@ -980,6 +980,11 @@ async function calibrationStatus(env, stationId) {
       snapshots: snapshot?.rows || 0,
       run_days: snapshot?.run_days || 0,
       evaluated_days: metric.cases,
+      required_cases: MIN_TRAINING_CASES,
+      weights_active: metric.cases >= MIN_TRAINING_CASES,
+      next_check: metric.cases >= MIN_TRAINING_CASES
+        ? "Training läuft weiter automatisch."
+        : "Nächster Check nach DWD-Istwert.",
       summary: metric.cases >= MIN_TRAINING_CASES
         ? `${metric.cases} Tage wurden schon mit echten DWD-Werten verglichen. Gelernte lokale Gewichte sind aktiv.`
         : `${metric.cases} von ${MIN_TRAINING_CASES} nötigen Tagen sind bewertet. Bis dahin nutzt die App vorsichtige Startgewichte.`,
@@ -994,6 +999,10 @@ async function calibrationStatus(env, stationId) {
     status: "learning",
     snapshots: rows,
     run_days: runDays,
+    evaluated_days: 0,
+    required_cases: MIN_TRAINING_CASES,
+    weights_active: false,
+    next_check: "Nächster Check nach DWD-Istwert.",
     summary: rows
       ? `${runDays} ${runLabel} gestartet. ${pendingRows} ${dayLabel} warten noch auf echte DWD-Messwerte; danach kann die App Treffer und Fehler bewerten.`
       : "Für diese DWD-Station gibt es noch keinen automatischen Trainingslauf.",

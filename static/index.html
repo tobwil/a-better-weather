@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>a better weather</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260709-weather-copy">
+    <link rel="stylesheet" href="/static/styles.css?v=20260709-learning-status">
   </head>
   <body>
     <main class="app-shell">
@@ -98,9 +98,12 @@
       </section>
 
       <section id="calibration-band" class="calibration-band is-hidden">
-        <span class="metric-label">Kalibrierung</span>
+        <span class="metric-label">Lernstatus</span>
         <strong id="calibration-title">-</strong>
-        <p id="calibration-detail">-</p>
+        <div>
+          <div class="learning-progress" aria-hidden="true"><i id="calibration-progress"></i></div>
+          <p id="calibration-detail">-</p>
+        </div>
       </section>
 
       <nav id="view-tabs" class="view-tabs is-hidden" aria-label="Ansicht wählen">
@@ -163,6 +166,6 @@
       <span>powered by <a href="https://kisruptiv.de/" target="_blank" rel="noreferrer">kisruptiv</a></span>
       <a href="https://kisruptiv.de/legal" target="_blank" rel="noreferrer">Legal</a>
     </footer>
-    <script src="/static/app.js?v=20260709-weather-copy"></script>
+    <script src="/static/app.js?v=20260709-learning-status"></script>
   </body>
 </html>

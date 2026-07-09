@@ -38,6 +38,7 @@ const distanceLabel = document.querySelector("#distance-label");
 const sourceLabel = document.querySelector("#source-label");
 const calibrationTitle = document.querySelector("#calibration-title");
 const calibrationDetail = document.querySelector("#calibration-detail");
+const calibrationProgress = document.querySelector("#calibration-progress");
 const comparisonBody = document.querySelector("#comparison-body");
 const hourlyList = document.querySelector("#hourly-list");
 let lastDays = [];
@@ -116,7 +117,7 @@ async function loadForecast(city) {
     renderOverview(payload.overview);
     renderCurrent(payload.current);
     renderSummary(payload);
-    renderCalibration(payload.calibration);
+    renderCalibration(payload.calibration, payload.location?.label);
     renderComparison(payload.days, payload.current);
     renderHourly(payload.hourly || []);
     renderNerd(payload);
@@ -323,16 +324,21 @@ function renderSummary(payload) {
   sourceLabel.textContent = "OpenWeather + Open-Meteo + DWD";
 }
 
-function renderCalibration(calibration) {
+function renderCalibration(calibration, cityLabel = "Ort") {
   if (!calibration) {
-    calibrationTitle.textContent = "Archiv baut sich auf";
-    calibrationDetail.textContent = "Noch keine Kalibrierungsdaten vorhanden.";
+    calibrationTitle.textContent = `${cityLabel}: 0/18 verifizierte Fälle`;
+    calibrationDetail.textContent = "Noch kein Lernstatus verfügbar.";
+    calibrationProgress.style.width = "0%";
     return;
   }
-  calibrationTitle.textContent = calibration.status === "active"
-    ? `${calibration.evaluated_days} bewertete Tage`
-    : `${calibration.snapshots || 0} gespeicherte Forecasts`;
-  calibrationDetail.textContent = calibration.summary || "Kalibrierung baut sich auf.";
+  const verified = calibration.evaluated_days ?? 0;
+  const required = calibration.required_cases ?? 18;
+  const progress = Math.max(0, Math.min(100, (verified / required) * 100));
+  calibrationTitle.textContent = `${cityLabel}: ${verified}/${required} verifizierte Fälle`;
+  calibrationProgress.style.width = `${progress}%`;
+  calibrationDetail.textContent = calibration.weights_active
+    ? "Gelernte lokale Gewichte sind aktiv und werden mit jedem Trainingslauf nachgeschärft."
+    : `${calibration.next_check || "Nächster Check nach DWD-Istwert."} Gelernte Gewichte noch nicht aktiv.`;
 }
 
 function renderComparison(days, current) {
