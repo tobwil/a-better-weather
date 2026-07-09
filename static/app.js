@@ -89,7 +89,7 @@ viewTabs.addEventListener("click", (event) => {
   setActiveView(button.dataset.view);
 });
 
-showIdle("Ort eingeben und Forecast bauen.");
+showIdle("Ort eingeben und Wetter prüfen.");
 loadLearningDashboard();
 
 async function loadForecast(city) {

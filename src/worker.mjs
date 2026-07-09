@@ -814,9 +814,15 @@ function buildOverview(label, station, days, current) {
   const currentText = Number.isFinite(current?.best?.temperature_c)
     ? `Jetzt ${round(current.best.temperature_c, 1)}° (${current.best.source}). `
     : "";
+  const todayRange = Number.isFinite(today.t_min) && Number.isFinite(today.t_max)
+    ? `${round(today.t_min, 1)}° bis ${round(today.t_max, 1)}°`
+    : `${round(today.t_mean, 1)}°`;
+  const wettestText = wettest && wettest.rain_signal?.score >= 45
+    ? `Auffaelligstes Regensignal: ${formatShortDate(wettest.date)} mit ${Math.round((wettest.likely.rain_probability || 0) * 100)}%.`
+    : "Kein klares Regensignal im Zeitraum.";
   return {
-    headline: `${label}: ${currentText}${today.condition || "Forecast"}, ${round(today.t_mean, 1)}° Rest-Tagesmittel, ${Math.round((today.rain_probability || 0) * 100)}% Regenrisiko`,
-    detail: `Naechstes starkes Regensignal: ${wettest ? formatShortDate(wettest.date) : "-"} mit ${Math.round((wettest?.likely?.rain_probability || 0) * 100)}%. Schwaechste Confidence: ${weakest ? formatShortDate(weakest.date) : "-"} (${weakest?.likely?.confidence || "-"}%).`,
+    headline: `${label}: ${currentText}Heute ${todayRange}, ${today.condition || "Forecast"}, ${Math.round((today.rain_probability || 0) * 100)}% Regenrisiko`,
+    detail: `${wettestText} Unsicherster Tag: ${weakest ? formatShortDate(weakest.date) : "-"} (${weakest?.likely?.confidence || "-"}% Confidence).`,
     station_note: `DWD-Referenz: ${station.name}, ${station.distance_km} km entfernt.`,
     actions: today.rain_probability >= 0.45 ? [`${formatShortDate(days[0].date)}: Regenfenster im Blick behalten`] : ["Keine harte Regenwarnung im Kurzfristfenster"],
     watch: days.filter((day) => day.rain_signal.score >= 45).slice(0, 2).map((day) => `${formatShortDate(day.date)}: ${day.rain_signal.level}`),
