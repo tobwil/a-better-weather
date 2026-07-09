@@ -76,7 +76,7 @@ learningCards.addEventListener("click", async (event) => {
   const removeButton = event.target.closest("[data-remove-city]");
   if (openButton) {
     cityInput.value = openButton.dataset.openCity;
-    loadForecast(openButton.dataset.openCity);
+    await loadForecast(openButton.dataset.openCity, { scrollToResult: true });
   }
   if (removeButton) {
     await fetch(`/api/learning/remove?city=${encodeURIComponent(removeButton.dataset.removeCity)}`);
@@ -93,7 +93,7 @@ viewTabs.addEventListener("click", (event) => {
 showIdle("Ort eingeben und Wetter prüfen.");
 loadLearningDashboard();
 
-async function loadForecast(city) {
+async function loadForecast(city, options = {}) {
   const button = form.querySelector("button");
   button.disabled = true;
   briefEl.classList.add("is-hidden");
@@ -108,9 +108,12 @@ async function loadForecast(city) {
   nerdSection.classList.add("is-hidden");
   daysEl.classList.remove("is-hidden");
   daysEl.innerHTML = `<div class="loading">DWD-Station und Forecast werden geladen...</div>`;
+  if (options.scrollToResult) {
+    daysEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   try {
     const response = await fetch(`/api/forecast?city=${encodeURIComponent(city)}`);
-    const payload = await response.json();
+    const payload = await readJsonResponse(response, "Forecast konnte nicht geladen werden");
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Forecast konnte nicht geladen werden");
     }
@@ -133,6 +136,9 @@ async function loadForecast(city) {
     renderChart(payload.days);
   } catch (error) {
     daysEl.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+    if (options.scrollToResult) {
+      daysEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } finally {
     button.disabled = false;
   }
@@ -188,7 +194,7 @@ async function readJsonResponse(response, fallbackMessage) {
   const contentType = response.headers.get("content-type") || "";
   const text = await response.text();
   if (!contentType.includes("application/json")) {
-    throw new Error(`${fallbackMessage}: Cloudflare lieferte keine JSON-Antwort (${response.status}). Bitte neu laden.`);
+    throw new Error(`${fallbackMessage}: Der Server hat gerade keine Wetterdaten geliefert (${response.status}). Bitte in ein paar Sekunden erneut versuchen.`);
   }
   try {
     return JSON.parse(text);

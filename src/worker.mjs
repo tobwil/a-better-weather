@@ -84,6 +84,9 @@ export default {
       if (url.pathname.startsWith("/static/")) {
         return fetchAsset(request, env, url.pathname.replace(/^\/static\//, "/"));
       }
+      if (url.pathname.startsWith("/api/")) {
+        return jsonResponse({ error: "API-Endpunkt nicht gefunden." }, 404);
+      }
       return env.ASSETS.fetch(request);
     } catch (error) {
       return jsonResponse({ error: publicError(error) }, 500);
