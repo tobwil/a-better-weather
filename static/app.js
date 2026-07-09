@@ -535,9 +535,11 @@ function primaryDayDisplay(day, current, index) {
 
 function formatLikelyCell(day, current, index) {
   const likely = day.likely || day.challenged || {};
-  const display = primaryDayDisplay(day, current, index);
   if (index === 0 && Number.isFinite(current?.best?.temperature_c)) {
-    return `<strong>${formatTemp(display.temperature)}</strong><span>${escapeHtml(display.label)} · Forecast-Mittel ${formatTemp(likely.t_mean)} · ${Math.round((likely.rain_probability || 0) * 100)}% Regen</span>`;
+    const observedAt = current?.openweather?.observed_at || current?.open_meteo?.observed_at;
+    const time = formatTime(observedAt);
+    const nowLabel = time ? `Jetzt ${formatTemp(current.best.temperature_c)} um ${time}` : `Jetzt ${formatTemp(current.best.temperature_c)}`;
+    return `<strong>${formatTemp(likely.t_min)} bis ${formatTemp(likely.t_max)}</strong><span>Heute Forecast: Mittel ${formatTemp(likely.t_mean)} · ${Math.round((likely.rain_probability || 0) * 100)}% Regen</span><span>${escapeHtml(nowLabel)} · Momentanwert, nicht Tagesforecast</span>`;
   }
   return `<strong>${formatTemp(likely.t_mean)}</strong><span>${Math.round((likely.rain_probability || 0) * 100)}% Regen, ${formatWind(likely.wind_mean)}</span>`;
 }
