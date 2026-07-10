@@ -209,6 +209,9 @@ async function handleLearningAdd(url, env) {
 }
 
 async function handleLearningRemove(url, env) {
+  if (env.TRAINING_SECRET && url.searchParams.get("secret") !== env.TRAINING_SECRET) {
+    return jsonResponse({ error: "Lernpfad kann nur administrativ geändert werden." }, 403);
+  }
   const city = (url.searchParams.get("city") || "").trim();
   if (!city) return jsonResponse({ error: "Bitte Stadt angeben." }, 400);
   if (env.DB) {

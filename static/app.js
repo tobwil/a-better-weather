@@ -73,14 +73,9 @@ learningForm.addEventListener("submit", async (event) => {
 
 learningCards.addEventListener("click", async (event) => {
   const openButton = event.target.closest("[data-open-city]");
-  const removeButton = event.target.closest("[data-remove-city]");
   if (openButton) {
     cityInput.value = openButton.dataset.openCity;
     await loadForecast(openButton.dataset.openCity, { scrollToResult: true });
-  }
-  if (removeButton) {
-    await fetch(`/api/learning/remove?city=${encodeURIComponent(removeButton.dataset.removeCity)}`);
-    loadLearningDashboard();
   }
 });
 
@@ -184,7 +179,6 @@ function renderLearningDashboard(payload) {
         <p class="date">${escapeHtml(item.city)}</p>
         <strong>Fehler</strong>
         <span>${escapeHtml(item.error)}</span>
-        <button type="button" class="ghost-button" data-remove-city="${escapeHtml(item.city)}">Entfernen</button>
       </article>
     `),
   ].join("") || `<div class="empty-state">Noch keine Lernstädte ausgewählt.</div>`;
@@ -244,7 +238,6 @@ function renderLearningCard(card) {
       <p>${escapeHtml(insight)}</p>
       <div class="learning-actions">
         <button type="button" data-open-city="${escapeHtml(card.city)}">Öffnen</button>
-        <button type="button" class="ghost-button" data-remove-city="${escapeHtml(card.city)}">Aus Lernpfad entfernen</button>
       </div>
     </article>
   `;
