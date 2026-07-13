@@ -128,19 +128,20 @@ async function handleLearningCards(env) {
   const cities = await loadLearningCities(env);
   const cards = [];
   const errors = [];
+  const todayDate = localDate(new Date());
   for (const city of cities) {
     try {
       const normalized = normalizeCity(city);
       const row = env.DB
         ? await env.DB.prepare(
             "SELECT * FROM forecast_snapshots WHERE normalized_city = ? AND target_date = ? ORDER BY generated_at DESC LIMIT 1"
-          ).bind(normalized, localDate(new Date())).first()
+          ).bind(normalized, todayDate).first()
         : null;
-      if (!row) {
-        errors.push({ city, error: "Noch kein aktueller Lernwert vorhanden. Bitte einmal öffnen oder den nächsten automatischen Lauf abwarten." });
-        continue;
+      if (row?.snapshot_date === todayDate) {
+        cards.push(await dashboardCardFromSnapshot(env, city, row));
+      } else {
+        cards.push(await dashboardCardFromLiveForecast(env, city, row));
       }
-      cards.push(await dashboardCardFromSnapshot(env, city, row));
     } catch (error) {
       errors.push({ city, error: publicError(error) });
     }
@@ -156,30 +157,57 @@ async function handleLearningCards(env) {
 async function dashboardCardFromSnapshot(env, city, row) {
   const today = JSON.parse(row.payload_json || "{}");
   const current = await currentForCity(env, city);
-  return {
+  return dashboardCardPayload({
     city,
-    location: { label: row.city },
-    station: {
-      id: row.station_id,
-      name: row.station_name,
-      distance_km: null,
-    },
+    label: row.city,
+    station: { id: row.station_id, name: row.station_name, distance_km: null },
     generated_at: row.generated_at,
     current,
     today,
+    learningStatus: row.verified_at ? "bewertet" : "aktiv",
+    learningSummary: row.verified_at
+      ? "Dieser Tag wurde bereits gegen den DWD-Istwert bewertet."
+      : "Automatische Bewertung aktiv, sobald der offizielle Tageswert verfügbar ist.",
+    cases: row.verified_at ? 1 : 0,
+  });
+}
+
+async function dashboardCardFromLiveForecast(env, city, staleRow) {
+  const payload = await buildForecast(env, { city });
+  return dashboardCardPayload({
+    city,
+    label: payload.location.label,
+    station: payload.station,
+    generated_at: payload.source.generated_at,
+    current: payload.current,
+    today: compactDay(payload.days[0]),
+    learningStatus: "wartet",
+    learningSummary: staleRow
+      ? "Aktueller Ersatzwert angezeigt; der nächste Trainingslauf ersetzt den veralteten Snapshot."
+      : "Aktueller Ersatzwert angezeigt; der nächste Trainingslauf legt den ersten Snapshot an.",
+    cases: 0,
+  });
+}
+
+function dashboardCardPayload({ city, label, station, generated_at, current, today, learningStatus, learningSummary, cases }) {
+  return {
+    city,
+    location: { label },
+    station,
+    generated_at,
+    current,
+    today,
     summary: {
-      headline: `${row.city}: aktuelle Lage und Resttagesforecast`,
+      headline: `${label}: aktuelle Lage und Resttagesforecast`,
       detail: "Startkachel zeigt den Jetztwert und den zuletzt berechneten Resttagesforecast.",
-      station_note: `DWD-Referenz: ${row.station_name}.`,
+      station_note: `DWD-Referenz: ${station.name}.`,
       actions: [],
       watch: [],
     },
     learning: {
-      status: row.verified_at ? "bewertet" : "aktiv",
-      cases: row.verified_at ? 1 : 0,
-      summary: row.verified_at
-        ? "Dieser Tag wurde bereits gegen den DWD-Istwert bewertet."
-        : "Automatische Bewertung aktiv, sobald der offizielle Tageswert verfügbar ist.",
+      status: learningStatus,
+      cases,
+      summary: learningSummary,
     },
   };
 }
@@ -248,19 +276,21 @@ async function handleFeed(url, env) {
 
 async function runTrainingCycle(env) {
   const cities = await loadLearningCities(env);
-  const archived = [];
-  const errors = [];
-  for (const city of cities) {
-    try {
-      const payload = await buildForecast(env, { city });
-      await archiveForecast(env, payload);
-      await verifySnapshots(env, payload.station.id);
-      archived.push(city);
-    } catch (error) {
-      errors.push({ city, error: publicError(error) });
-    }
+  const results = await Promise.all(cities.map((city) => trainLearningCity(env, city)));
+  const archived = results.filter((result) => result.ok).map((result) => result.city);
+  const errors = results.filter((result) => !result.ok).map(({ city, error }) => ({ city, error }));
+  return { archived: archived.length, cities: archived, errors };
+}
+
+async function trainLearningCity(env, city) {
+  try {
+    const payload = await buildForecast(env, { city });
+    await archiveForecast(env, payload);
+    await verifySnapshots(env, payload.station.id);
+    return { ok: true, city: payload.location.label, station_id: payload.station.id, days: payload.days.length };
+  } catch (error) {
+    return { ok: false, city, error: publicError(error) };
   }
-  return { archived: archived.length, errors };
 }
 
 async function buildForecast(env, params) {
