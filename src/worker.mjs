@@ -103,7 +103,7 @@ async function handleForecast(url, env, compact) {
   if (invalidLocation(params)) {
     return jsonResponse({ error: "Bitte Ort oder Koordinaten angeben." }, 400);
   }
-  const payload = await buildForecast(env, params);
+  const payload = await buildForecast(env, params, { refreshObservations: false });
   return jsonResponse(compact ? compactForecastPayload(payload) : payload);
 }
 
@@ -253,7 +253,7 @@ async function handleFeed(url, env) {
   if (invalidLocation(params)) {
     return new Response("Bitte Ort oder Koordinaten angeben.", { status: 400 });
   }
-  const payload = await buildForecast(env, params);
+  const payload = await buildForecast(env, params, { refreshObservations: false });
   return new Response(rssFeed(payload, url.origin), {
     headers: {
       "content-type": "application/rss+xml; charset=utf-8",
@@ -277,7 +277,7 @@ async function runTrainingCycle(env) {
 
 async function trainLearningCity(env, city) {
   try {
-    const payload = await buildForecast(env, { city });
+    const payload = await buildForecast(env, { city }, { refreshObservations: true });
     await archiveForecast(env, payload);
     await verifySnapshots(env, payload.station.id);
     return { ok: true, city: payload.location.label, station_id: payload.station.id, days: payload.days.length };
@@ -286,10 +286,11 @@ async function trainLearningCity(env, city) {
   }
 }
 
-async function buildForecast(env, params) {
+async function buildForecast(env, params, { refreshObservations = false } = {}) {
   const [lat, lon, label] = await resolveLocation(env, params);
   const station = await nearestStation(env, lat, lon);
-  const observations = await loadStationObservations(env, station.id);
+  const observations = await loadStationObservations(env, station.id, { refresh: refreshObservations });
+  const hasDwdObservations = observations.length > 0;
   const learning = await learnedBlendWeights(env, station.id);
   const [openweather, openweatherCurrent, openMeteo] = await Promise.all([
     fetchOpenWeatherForecast(env, lat, lon),
@@ -317,9 +318,13 @@ async function buildForecast(env, params) {
       dwd: DWD_DAILY_BASE,
       generated_at: new Date().toISOString(),
       observations: observations.length,
-      method: "OpenWeather und Open-Meteo Konsens, lokal mit DWD-Klimatologie, aktueller Stationsanomalie und gelernten D1-Backtests kalibriert.",
-      weighting_status: "learning_enabled",
-      weighting_note: "Die App speichert Vorhersagen dauerhaft, vergleicht sie später mit offiziellen Tageswerten und lernt daraus lokale Gewichte je DWD-Station.",
+      method: hasDwdObservations
+        ? "OpenWeather und Open-Meteo Konsens, lokal mit DWD-Klimatologie, aktueller Stationsanomalie und gelernten D1-Backtests kalibriert."
+        : "Sofortiger OpenWeather- und Open-Meteo-Konsens. Das lokale DWD-Muster wird im Hintergrundtraining aufgebaut.",
+      weighting_status: hasDwdObservations ? "learning_enabled" : "start_model",
+      weighting_note: hasDwdObservations
+        ? "Die App speichert Vorhersagen dauerhaft, vergleicht sie später mit offiziellen Tageswerten und lernt daraus lokale Gewichte je DWD-Station."
+        : "Für diese Station ist noch kein lokaler DWD-Datensatz vorbereitet. Bis zum nächsten Trainingslauf gilt der direkte Modellkonsens.",
       learning,
     },
     current,
@@ -430,10 +435,13 @@ async function loadStations(env) {
   return stations;
 }
 
-async function loadStationObservations(env, stationId) {
+async function loadStationObservations(env, stationId, { refresh = true } = {}) {
   const cacheKey = `dwd:observations:${stationId}`;
-  const cached = await readCache(env, cacheKey);
+  const cached = await readCache(env, cacheKey, { allowExpired: !refresh });
   if (cached) return JSON.parse(cached);
+  // Interactive requests must remain lightweight. A cold DWD archive can be
+  // downloaded, unzipped and parsed by the scheduled training run instead.
+  if (!refresh) return [];
   const [historicalUrl, recentUrl] = await Promise.all([
     findDwdStationZip(env, "historical", stationId),
     findDwdStationZip(env, "recent", stationId),
@@ -644,7 +652,6 @@ function buildCurrentConditions(openweatherCurrent, openMeteo) {
 }
 
 function challengeDay(openweather, openMeteo, observations, station, weights, recentAnomaly, horizon) {
-  const pattern = climatePattern(observations, openweather.date);
   const om = openMeteo || null;
   const modelTemp = Number.isFinite(om?.t_mean) ? mean([openweather.t_mean, om.t_mean]) : openweather.t_mean;
   const modelMin = Number.isFinite(om?.t_min) ? mean([openweather.t_min, om.t_min]) : openweather.t_min;
@@ -653,6 +660,17 @@ function challengeDay(openweather, openMeteo, observations, station, weights, re
     ? mean([openweather.rain_probability, om.rain_probability])
     : openweather.rain_probability;
   const modelRainMm = Number.isFinite(om?.rain_mm) ? mean([openweather.rain_mm, om.rain_mm]) : openweather.rain_mm;
+  const pattern = climatePattern(observations, openweather.date, station.id) || {
+    t_mean: round(modelTemp, 1),
+    t_low: round(modelMin, 1),
+    t_high: round(modelMax, 1),
+    rain_probability: round(modelRainProbability, 2),
+    rain_mm: round(modelRainMm, 1),
+    rain_if_wet_mm: round(modelRainMm, 1),
+    sample_size: 0,
+    station_id: station.id,
+    source: "model_fallback",
+  };
   const recentWeight = horizon === 0 ? 0.55 : Math.max(0.15, 0.45 - horizon * 0.08);
   const dwdAdjusted = pattern.t_mean + recentAnomaly * recentWeight;
   const tempWeight = weights.temp_model;
@@ -728,9 +746,10 @@ function challengeDay(openweather, openMeteo, observations, station, weights, re
   };
 }
 
-function climatePattern(observations, targetDate) {
+function climatePattern(observations, targetDate, stationId) {
   const monthDay = targetDate.slice(5);
   const candidates = observations.filter((row) => monthDayDistance(row.month_day, monthDay) <= 7);
+  if (!candidates.length) return null;
   const temps = candidates.map((row) => row.t_mean).filter(Number.isFinite);
   const rain = candidates.map((row) => row.rain_mm).filter(Number.isFinite);
   const wet = rain.filter((value) => value >= 0.1);
@@ -742,7 +761,8 @@ function climatePattern(observations, targetDate) {
     rain_mm: round(mean(rain), 1),
     rain_if_wet_mm: round(mean(wet), 1),
     sample_size: candidates.length,
-    station_id: observations.station_id,
+    station_id: stationId,
+    source: "dwd",
   };
 }
 
@@ -763,11 +783,12 @@ function confidenceScore({ modelTemp, openweather, openMeteo, pattern, likelyRai
     : 0.25;
   const tempGap = Math.abs(modelTemp - pattern.t_mean);
   const dwdRainGap = Math.abs(likelyRainProbability - pattern.rain_probability);
+  const hasDwdPattern = pattern.source !== "model_fallback";
   const components = {
     model_agreement: clampInt(100 - modelTempGap * 12 - modelRainGap * 45, 20, 100),
-    climate_fit: clampInt(100 - tempGap * 9, 15, 100),
-    rain_fit: clampInt(100 - dwdRainGap * 85, 15, 100),
-    data_depth: clampInt((pattern.sample_size / 1500) * 100, 25, 100),
+    climate_fit: hasDwdPattern ? clampInt(100 - tempGap * 9, 15, 100) : 45,
+    rain_fit: hasDwdPattern ? clampInt(100 - dwdRainGap * 85, 15, 100) : 45,
+    data_depth: hasDwdPattern ? clampInt((pattern.sample_size / 1500) * 100, 25, 100) : 25,
     horizon: clampInt(100 - horizon * 9, 45, 100),
   };
   const overall = clampInt(
@@ -1077,10 +1098,10 @@ function decodeLatin1(bytes) {
   return text;
 }
 
-async function readCache(env, key) {
+async function readCache(env, key, { allowExpired = false } = {}) {
   if (!env.DB) return null;
   const row = await env.DB.prepare("SELECT data, expires_at FROM api_cache WHERE cache_key = ?").bind(key).first();
-  if (!row || row.expires_at < Math.floor(Date.now() / 1000)) return null;
+  if (!row || (!allowExpired && row.expires_at < Math.floor(Date.now() / 1000))) return null;
   return row.data;
 }
 
@@ -1328,14 +1349,20 @@ function adviceChips(probability, amount) {
 function explanationSummary(openweather, openMeteo, pattern, likely, shift) {
   const direction = shift > 0.4 ? "waermer" : shift < -0.4 ? "kuehler" : "nahe am Modellmittel";
   const omPart = openMeteo ? `Open-Meteo liegt bei ${openMeteo.t_mean}°` : "Open-Meteo ohne Tageswert";
+  if (pattern.source === "model_fallback") {
+    return `OpenWeather ${openweather.t_mean}°, ${omPart}. Das lokale DWD-Muster wird im Hintergrund aufgebaut; bis dahin gilt der direkte Modellkonsens mit Startbewertung.`;
+  }
   return `OpenWeather ${openweather.t_mean}°, ${omPart}; DWD-Muster ${pattern.t_low}° bis ${pattern.t_high}°. Der gelernte Blend zieht den Forecast ${direction} auf ${likely.t_mean}°.`;
 }
 
 function mathBlock({ openweather, openMeteo, modelTemp, modelRainProbability, modelRainMm, pattern, recentAnomaly, recentWeight, dwdAdjusted, weights, likely, confidence, rainSignal }) {
+  const fallbackNote = pattern.source === "model_fallback"
+    ? "Lokale DWD-Daten werden im Hintergrund vorbereitet; der interaktive Forecast nutzt bis dahin den direkten Modellkonsens."
+    : null;
   return {
     temperature: {
       formula: "likely = w_model * model_mean + (1 - w_model) * (DWD_mean + recent_anomaly * recent_weight)",
-      weight_note: "w_model wird aus verifizierten D1-Backtests je DWD-Station gelernt; bis genug Faelle vorliegen gelten Startgewichte.",
+      weight_note: fallbackNote || "w_model wird aus verifizierten D1-Backtests je DWD-Station gelernt; bis genug Faelle vorliegen gelten Startgewichte.",
       openweather_c: openweather.t_mean,
       open_meteo_c: openMeteo?.t_mean,
       model_mean_c: round(modelTemp, 1),
@@ -1349,7 +1376,7 @@ function mathBlock({ openweather, openMeteo, modelTemp, modelRainProbability, mo
     },
     rain: {
       formula: "likely_rain = w_rain * model_probability + (1 - w_rain) * DWD_wet_day_frequency",
-      weight_note: "Regen wird gegen Treffer/Nichttreffer per Brier Score bewertet und danach lokal nachjustiert.",
+      weight_note: fallbackNote || "Regen wird gegen Treffer/Nichttreffer per Brier Score bewertet und danach lokal nachjustiert.",
       openweather_probability: openweather.rain_probability,
       open_meteo_probability: openMeteo?.rain_probability,
       model_probability: round(modelRainProbability, 2),

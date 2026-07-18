@@ -62,6 +62,107 @@ test("default dashboard and training set excludes Nuernberg and Eichstaett", asy
   assert.deepEqual(payload.missing_cities, payload.cities);
 });
 
+test("interactive forecast uses model fallback instead of downloading a cold DWD archive", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const outboundUrls = [];
+  const forecastTime = Math.floor(new Date("2026-07-18T12:00:00Z").getTime() / 1000);
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    outboundUrls.push(url);
+    if (url.includes("/data/2.5/forecast")) {
+      return Response.json({
+        list: [{
+          dt: forecastTime,
+          main: { temp: 22, temp_min: 18, temp_max: 24 },
+          pop: 0.2,
+          rain: {},
+          wind: { speed: 3 },
+          weather: [{ description: "klar" }],
+        }],
+      });
+    }
+    if (url.includes("/data/2.5/weather")) {
+      return Response.json({
+        dt: forecastTime,
+        main: { temp: 21, feels_like: 21 },
+        wind: { speed: 2 },
+        weather: [{ description: "klar" }],
+      });
+    }
+    if (url.includes("api.open-meteo.com")) {
+      return Response.json({
+        current: { temperature_2m: 21, weather_code: 0, wind_speed_10m: 7.2, time: "2026-07-18T14:00" },
+        hourly: {
+          time: ["2026-07-18T12:00", "2026-07-18T13:00", "2026-07-18T14:00"],
+          temperature_2m: [21, 22, 23],
+          precipitation_probability: [10, 20, 10],
+          precipitation: [0, 0, 0],
+          weather_code: [0, 0, 0],
+          wind_speed_10m: [7.2, 7.2, 7.2],
+        },
+      });
+    }
+    throw new Error(`Unexpected outbound request: ${url}`);
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const stationLine = [
+    "00433",
+    " ",
+    "19480101",
+    " ",
+    "20991231",
+    " ",
+    String(48).padStart(14),
+    " ",
+    "52.4670".padStart(10),
+    " ",
+    "13.4020".padStart(10),
+    " ",
+    "Berlin-Tempelhof".padEnd(41),
+    "Berlin",
+  ].join("");
+  const stationData = `header\nheader\n${stationLine}\n`;
+  const database = {
+    prepare(sql) {
+      let values = [];
+      return {
+        bind(...args) {
+          values = args;
+          return this;
+        },
+        async first() {
+          if (sql.includes("FROM api_cache") && values[0] === "dwd:stations:latin1:v3") {
+            return { data: stationData, expires_at: 4_102_444_800 };
+          }
+          if (sql.includes("COUNT(*) AS rows")) {
+            return { rows: 0, run_days: 0, cities: 0, pending_rows: 0 };
+          }
+          return null;
+        },
+        async run() {
+          return { success: true };
+        },
+      };
+    },
+  };
+
+  const response = await worker.fetch(
+    new Request("https://weather.example/api/forecast?city=Berlin"),
+    { DB: database, OPENWEATHER_API_KEY: "test" },
+    {},
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.source.observations, 0);
+  assert.equal(payload.source.weighting_status, "start_model");
+  assert.equal(payload.days[0].pattern.source, "model_fallback");
+  assert.equal(outboundUrls.some((url) => url.includes("opendata.dwd.de")), false);
+});
+
 test("learning card renderer reads model state from the card", async () => {
   const appSource = await readFile(new URL("./static/app.js", import.meta.url), "utf8");
   const rendererStart = appSource.indexOf("function renderLearningCard(card)");
