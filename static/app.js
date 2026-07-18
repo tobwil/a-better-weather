@@ -248,6 +248,7 @@ async function readJsonResponse(response, fallbackMessage) {
 function renderLearningCard(card) {
   const today = card.today || {};
   const now = card.current?.best || {};
+  const learning = card.learning || {};
   const observedAt = card.current?.openweather?.observed_at || card.current?.open_meteo?.observed_at;
   const insight = learningCardInsight(card);
   const confidence = today.confidence ?? 0;
