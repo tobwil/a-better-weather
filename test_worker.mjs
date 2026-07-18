@@ -50,6 +50,18 @@ test("learning cards defer missing snapshots without starting outbound requests"
   assert.equal(outboundRequests, 0);
 });
 
+test("default dashboard and training set excludes Nuernberg and Eichstaett", async () => {
+  const response = await worker.fetch(
+    new Request("https://weather.example/api/learning/cards"),
+    {},
+    {},
+  );
+  const payload = await response.json();
+
+  assert.deepEqual(payload.cities, ["Berlin", "Muenchen", "Hamburg", "Coburg"]);
+  assert.deepEqual(payload.missing_cities, payload.cities);
+});
+
 test("learning card renderer reads model state from the card", async () => {
   const appSource = await readFile(new URL("./static/app.js", import.meta.url), "utf8");
   const rendererStart = appSource.indexOf("function renderLearningCard(card)");

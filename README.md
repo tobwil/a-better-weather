@@ -43,7 +43,7 @@ http://127.0.0.1:8765
 ```
 
 Ohne `OPENWEATHER_API_KEY` liefert die API bewusst einen Fehler. Die App verwendet im Produktivpfad keine Demo-Forecasts.
-Die Startseite lädt standardmäßig Trainingskacheln für Berlin, Muenchen, Nuernberg, Hamburg und Coburg. Eine freie Detailabfrage startet erst nach Ortseingabe und Klick auf `Forecast bauen`.
+Die Startseite lädt standardmäßig Trainingskacheln für Berlin, Muenchen, Hamburg und Coburg. Eine freie Detailabfrage startet erst nach Ortseingabe und Klick auf `Forecast bauen`.
 
 ## Cloudflare Deploy
 
@@ -82,7 +82,7 @@ Die Kalibrierung folgt einer MOS/EMOS-artigen Idee: Temperatur wird über Fehler
 
 ## Lernpfad
 
-Die Startseite zeigt standardmäßig Berlin, Muenchen, Nuernberg, Hamburg und Coburg als Trainingsstädte. Die Liste liegt in `.weather_cache/learning_cities.json` und kann über die UI oder die `/api/learning/add`-/`remove`-Endpunkte geändert werden.
+Die Startseite zeigt standardmäßig Berlin, Muenchen, Hamburg und Coburg als Trainingsstädte. Im Cloudflare-Betrieb liegt die Liste in D1 und kann über die UI oder die `/api/learning/add`-/`remove`-Endpunkte geändert werden.
 
 Solange der Server läuft, zieht ein Hintergrundlauf die Lernstädte einmal beim Start und danach alle 24 Stunden. Jeder Tageslauf legt pro Stadt höchstens einen Forecast-Snapshot im Archiv ab. Sobald der Zieltag in den DWD-Istwerten vorhanden ist, wird dieser Snapshot fürs Training der Blend-Gewichte verwendet.
 

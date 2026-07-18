@@ -10,7 +10,7 @@ const DEFAULT_BLEND_WEIGHTS = {
   rain_probability_model: 0.70,
   rain_amount_model: 0.72,
 };
-const DEFAULT_CITIES = ["Berlin", "Muenchen", "Nuernberg", "Hamburg", "Coburg"];
+const DEFAULT_CITIES = ["Berlin", "Muenchen", "Hamburg", "Coburg"];
 const MIN_TRAINING_CASES = 18;
 
 const GERMAN_CITIES = {

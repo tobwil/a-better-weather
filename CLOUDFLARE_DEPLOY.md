@@ -7,7 +7,7 @@ Der `kisruptiv`-Branch ist auf Cloudflare-first ausgelegt: statisches Frontend, 
 - Cloudflare Worker serviert das Frontend aus `static/`.
 - Derselbe Worker beantwortet `/api/*` und `/feed.xml`.
 - Cloudflare D1 speichert Lernstaedte, Forecast-Snapshots, verifizierte Istwerte, Modellmetriken und API-Cache.
-- Cron Triggers ziehen taeglich Forecasts fuer Berlin, Muenchen, Nuernberg, Hamburg, Coburg und Nutzerstaedte.
+- Cron Triggers ziehen taeglich Forecasts fuer Berlin, Muenchen, Hamburg, Coburg und Nutzerstaedte.
 - OpenWeather und Open-Meteo liefern aktuelle und prognostizierte Modellwerte.
 - DWD Open Data liefert Stationen und historische/recent Tageswerte fuer Klimakorridor und Verifizierung.
 

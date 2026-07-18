@@ -7,7 +7,7 @@ directory = "./static"
 binding = "ASSETS"
 
 [vars]
-DEFAULT_LEARNING_CITIES = "Berlin,Muenchen,Nuernberg,Hamburg,Coburg"
+DEFAULT_LEARNING_CITIES = "Berlin,Muenchen,Hamburg,Coburg"
 
 [[d1_databases]]
 binding = "DB"

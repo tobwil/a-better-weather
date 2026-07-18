@@ -61,6 +61,5 @@ CREATE TABLE IF NOT EXISTS api_cache (
 INSERT OR IGNORE INTO learning_cities(city, normalized_city) VALUES
   ('Berlin', 'berlin'),
   ('Muenchen', 'muenchen'),
-  ('Nuernberg', 'nuernberg'),
   ('Hamburg', 'hamburg'),
   ('Coburg', 'coburg');
