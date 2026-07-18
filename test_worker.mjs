@@ -125,6 +125,7 @@ test("interactive forecast uses model fallback instead of downloading a cold DWD
     "Berlin",
   ].join("");
   const stationData = `header\nheader\n${stationLine}\n`;
+  let observationCacheReads = 0;
   const database = {
     prepare(sql) {
       let values = [];
@@ -136,6 +137,10 @@ test("interactive forecast uses model fallback instead of downloading a cold DWD
         async first() {
           if (sql.includes("FROM api_cache") && values[0] === "dwd:stations:latin1:v3") {
             return { data: stationData, expires_at: 4_102_444_800 };
+          }
+          if (sql.includes("FROM api_cache") && values[0] === "dwd:observations:00433") {
+            observationCacheReads += 1;
+            return { data: "this large cache must never be parsed interactively", expires_at: 4_102_444_800 };
           }
           if (sql.includes("COUNT(*) AS rows")) {
             return { rows: 0, run_days: 0, cities: 0, pending_rows: 0 };
@@ -160,6 +165,7 @@ test("interactive forecast uses model fallback instead of downloading a cold DWD
   assert.equal(payload.source.observations, 0);
   assert.equal(payload.source.weighting_status, "start_model");
   assert.equal(payload.days[0].pattern.source, "model_fallback");
+  assert.equal(observationCacheReads, 0);
   assert.equal(outboundUrls.some((url) => url.includes("opendata.dwd.de")), false);
 });
 

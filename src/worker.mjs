@@ -436,12 +436,13 @@ async function loadStations(env) {
 }
 
 async function loadStationObservations(env, stationId, { refresh = true } = {}) {
-  const cacheKey = `dwd:observations:${stationId}`;
-  const cached = await readCache(env, cacheKey, { allowExpired: !refresh });
-  if (cached) return JSON.parse(cached);
-  // Interactive requests must remain lightweight. A cold DWD archive can be
-  // downloaded, unzipped and parsed by the scheduled training run instead.
+  // Never read or parse the multi-megabyte observation cache in an interactive
+  // request. Scheduled training owns all DWD archive/cache work; the user path
+  // returns immediately with the model-consensus fallback.
   if (!refresh) return [];
+  const cacheKey = `dwd:observations:${stationId}`;
+  const cached = await readCache(env, cacheKey);
+  if (cached) return JSON.parse(cached);
   const [historicalUrl, recentUrl] = await Promise.all([
     findDwdStationZip(env, "historical", stationId),
     findDwdStationZip(env, "recent", stationId),
@@ -1098,10 +1099,10 @@ function decodeLatin1(bytes) {
   return text;
 }
 
-async function readCache(env, key, { allowExpired = false } = {}) {
+async function readCache(env, key) {
   if (!env.DB) return null;
   const row = await env.DB.prepare("SELECT data, expires_at FROM api_cache WHERE cache_key = ?").bind(key).first();
-  if (!row || (!allowExpired && row.expires_at < Math.floor(Date.now() / 1000))) return null;
+  if (!row || row.expires_at < Math.floor(Date.now() / 1000)) return null;
   return row.data;
 }
 
