@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "node --check src/worker.mjs && node --check static/app.js",
+    "test": "node --test test_worker.mjs",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "db:migrate": "wrangler d1 migrations apply a_better_weather --remote"

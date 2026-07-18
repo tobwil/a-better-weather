@@ -137,11 +137,14 @@ async function handleLearningCards(env) {
             "SELECT * FROM forecast_snapshots WHERE normalized_city = ? AND target_date = ? ORDER BY generated_at DESC LIMIT 1"
           ).bind(normalized, todayDate).first()
         : null;
-      if (row?.snapshot_date === todayDate) {
-        cards.push(await dashboardCardFromSnapshot(env, city, row));
-      } else {
-        cards.push(await dashboardCardFromLiveForecast(env, city, row));
+      if (!row) {
+        errors.push({
+          city,
+          error: "Für heute liegt noch kein Trainings-Snapshot vor. Der nächste geplante Trainingslauf ergänzt ihn.",
+        });
+        continue;
       }
+      cards.push(await dashboardCardFromSnapshot(env, city, row, todayDate));
     } catch (error) {
       errors.push({ city, error: publicError(error) });
     }
@@ -154,9 +157,10 @@ async function handleLearningCards(env) {
   });
 }
 
-async function dashboardCardFromSnapshot(env, city, row) {
+async function dashboardCardFromSnapshot(env, city, row, todayDate) {
   const today = JSON.parse(row.payload_json || "{}");
   const current = await currentForCity(env, city);
+  const isCurrentSnapshot = row.snapshot_date === todayDate;
   return dashboardCardPayload({
     city,
     label: row.city,
@@ -164,28 +168,13 @@ async function dashboardCardFromSnapshot(env, city, row) {
     generated_at: row.generated_at,
     current,
     today,
-    learningStatus: row.verified_at ? "bewertet" : "aktiv",
+    learningStatus: row.verified_at ? "bewertet" : isCurrentSnapshot ? "aktiv" : "veraltet",
     learningSummary: row.verified_at
       ? "Dieser Tag wurde bereits gegen den DWD-Istwert bewertet."
-      : "Automatische Bewertung aktiv, sobald der offizielle Tageswert verfügbar ist.",
+      : isCurrentSnapshot
+        ? "Automatische Bewertung aktiv, sobald der offizielle Tageswert verfügbar ist."
+        : `Gespeicherter Forecast vom ${row.snapshot_date}; der nächste Trainingslauf aktualisiert ihn.`,
     cases: row.verified_at ? 1 : 0,
-  });
-}
-
-async function dashboardCardFromLiveForecast(env, city, staleRow) {
-  const payload = await buildForecast(env, { city });
-  return dashboardCardPayload({
-    city,
-    label: payload.location.label,
-    station: payload.station,
-    generated_at: payload.source.generated_at,
-    current: payload.current,
-    today: compactDay(payload.days[0]),
-    learningStatus: "wartet",
-    learningSummary: staleRow
-      ? "Aktueller Ersatzwert angezeigt; der nächste Trainingslauf ersetzt den veralteten Snapshot."
-      : "Aktueller Ersatzwert angezeigt; der nächste Trainingslauf legt den ersten Snapshot an.",
-    cases: 0,
   });
 }
 
@@ -276,7 +265,12 @@ async function handleFeed(url, env) {
 
 async function runTrainingCycle(env) {
   const cities = await loadLearningCities(env);
-  const results = await Promise.all(cities.map((city) => trainLearningCity(env, city)));
+  const results = [];
+  // Keep peak CPU and memory low on Workers Free: every city may download,
+  // unzip and parse DWD archives in addition to the weather API requests.
+  for (const city of cities) {
+    results.push(await trainLearningCity(env, city));
+  }
   const archived = results.filter((result) => result.ok).map((result) => result.city);
   const errors = results.filter((result) => !result.ok).map(({ city, error }) => ({ city, error }));
   return { archived: archived.length, cities: archived, errors };
