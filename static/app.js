@@ -163,17 +163,65 @@ async function loadLearningDashboard() {
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Lernpfad konnte nicht geladen werden");
     }
-    renderLearningDashboard(payload);
+    const missingCities = payload.missing_cities || [];
+    renderLearningDashboard({ ...payload, pending_cities: missingCities });
+    const initial = await loadInitialLearningCards(missingCities);
+    renderLearningDashboard({
+      ...payload,
+      cards: [...(payload.cards || []), ...initial.cards],
+      errors: [...(payload.errors || []), ...initial.errors],
+    });
   } catch (error) {
     learningCards.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
   }
 }
 
+async function loadInitialLearningCards(cities) {
+  const cards = [];
+  const errors = [];
+  // One request per city keeps each complete forecast inside its own Worker
+  // invocation and avoids the resource spike caused by one large dashboard request.
+  for (const city of cities) {
+    try {
+      const response = await fetch(`/api/forecast/compact?city=${encodeURIComponent(city)}`);
+      const payload = await readJsonResponse(response, `${city} konnte nicht geladen werden`);
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error || `${city} konnte nicht geladen werden`);
+      }
+      cards.push({
+        city,
+        location: payload.location,
+        station: payload.station,
+        generated_at: payload.generated_at,
+        current: payload.current,
+        today: payload.days?.[0] || null,
+        summary: payload.summary,
+        learning: payload.learning || {
+          status: "warming_up",
+          cases: 0,
+          summary: "Startgewichte bleiben aktiv, bis genügend verifizierte Fälle vorliegen.",
+        },
+      });
+    } catch (error) {
+      errors.push({ city, error: error.message });
+    }
+  }
+  return { cards, errors };
+}
+
 function renderLearningDashboard(payload) {
   const cards = payload.cards || [];
   const errors = payload.errors || [];
+  const pendingCities = payload.pending_cities || [];
   learningCards.innerHTML = [
     ...cards.map(renderLearningCard),
+    ...pendingCities.map((city) => `
+      <article class="learning-card">
+        <p class="date">${escapeHtml(city)}</p>
+        <strong>Startmodell wird berechnet …</strong>
+        <span>Aktuelles Wetter, OpenWeather, Open-Meteo und DWD-Muster werden geladen.</span>
+      </article>
+    `),
     ...errors.map((item) => `
       <article class="learning-card error-card">
         <p class="date">${escapeHtml(item.city)}</p>
@@ -234,6 +282,8 @@ function renderLearningCard(card) {
         <span>Index</span><strong>${today.rain_index ?? "-"} / 100</strong>
         <span>Confidence</span><strong>${today.confidence ?? "-"}%</strong>
         <span>Signal</span><strong>${escapeHtml(today.rain_level || "unauffällig")}</strong>
+        <span>Modell</span><strong>${escapeHtml(learning.status === "trained" ? "gelernt" : learning.status === "veraltet" ? "Snapshot" : "Startgewichte")}</strong>
+        <span>Fälle</span><strong>${learning.cases ?? 0}</strong>
       </div>
       <p>${escapeHtml(insight)}</p>
       <div class="learning-actions">

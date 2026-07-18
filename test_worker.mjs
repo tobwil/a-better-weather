@@ -4,7 +4,7 @@ import test from "node:test";
 import worker from "./src/worker.mjs";
 
 
-test("learning cards stay snapshot-only when today's snapshot is missing", async (t) => {
+test("learning cards defer missing snapshots without starting outbound requests", async (t) => {
   const originalFetch = globalThis.fetch;
   let outboundRequests = 0;
   globalThis.fetch = async () => {
@@ -44,8 +44,7 @@ test("learning cards stay snapshot-only when today's snapshot is missing", async
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /^application\/json/);
   assert.deepEqual(payload.cards, []);
-  assert.equal(payload.errors.length, 1);
-  assert.equal(payload.errors[0].city, "Berlin");
-  assert.match(payload.errors[0].error, /kein Trainings-Snapshot/);
+  assert.deepEqual(payload.errors, []);
+  assert.deepEqual(payload.missing_cities, ["Berlin"]);
   assert.equal(outboundRequests, 0);
 });

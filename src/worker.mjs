@@ -128,6 +128,7 @@ async function handleLearningCards(env) {
   const cities = await loadLearningCities(env);
   const cards = [];
   const errors = [];
+  const missingCities = [];
   const todayDate = localDate(new Date());
   for (const city of cities) {
     try {
@@ -138,10 +139,7 @@ async function handleLearningCards(env) {
           ).bind(normalized, todayDate).first()
         : null;
       if (!row) {
-        errors.push({
-          city,
-          error: "Für heute liegt noch kein Trainings-Snapshot vor. Der nächste geplante Trainingslauf ergänzt ihn.",
-        });
+        missingCities.push(city);
         continue;
       }
       cards.push(await dashboardCardFromSnapshot(env, city, row, todayDate));
@@ -153,6 +151,7 @@ async function handleLearningCards(env) {
     cities,
     cards,
     errors,
+    missing_cities: missingCities,
     generated_at: new Date().toUTCString(),
   });
 }
@@ -1098,6 +1097,7 @@ function compactForecastPayload(payload) {
     station: payload.station,
     generated_at: payload.source.generated_at,
     current: payload.current,
+    learning: payload.source.learning,
     summary: payload.overview,
     feed: `/feed.xml?city=${encodeURIComponent(payload.location.label)}`,
     days: payload.days.map(compactDay),
